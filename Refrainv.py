@@ -27,6 +27,8 @@ from tqdm import tqdm
 
 import numpy as np
 import pandas as pd
+
+import pyvista as pv
 #own modules
 from dtreader import dtreader
 
@@ -1014,7 +1016,48 @@ E-mail: vjs279@hotmail.com
                 #print(m.dimension)
                 #print(m.yMin())
                 #print(m.yMax())
+            def view_velocity_model():
+                
+                meshfile=filedialog.askopenfilename(title="Open VTK", initialdir=self.projPath,filetypes=[('VTK File', '*.vtk')])
+                self.mgr = TravelTimeManager()
+                self.mgr.load(meshfile)
+                
+                velocityWindow = Toplevel(self)
+                velocityWindow.title('Refrainv - External Starting Model')
+                velocityWindow.configure(bg = "#F0F0F0")
+                #meshWindow.geometry("1024x768")
+                velocityWindow.resizable(1,1)
+                velocityWindow.iconbitmap("%s/images/ico_refrapy.ico"%getcwd())
+                
+                frame = Frame(velocityWindow)
+                frame.grid(row = 0, column = 0)
+                fig = plt.figure(figsize = (12,6))#.2,8.62))
+                fig.patch.set_facecolor('#F0F0F0')
+                canvas = FigureCanvasTkAgg(fig, frame)
+                canvas.draw()
+                toolbar = NavigationToolbar2Tk(canvas, frame)
+                toolbar.update()
+                canvas._tkcanvas.pack()
+                
+                ax = fig.add_subplot(111)
+                ax.set_ylabel("POSITION [m]")
+                ax.set_xlabel("DEPTH [m]")
+                if self.showGrid: ax.grid(lw = .5, alpha = .5)
+                
+                pg.show(self.readMesh, ax = ax)
+                ax.set_xlabel('Distance (m)')
+                ax.set_ylabel('Elevation (m)')
+                ax.set_title('Mesh for traveltimes tomography')
 
+                ax.set_aspect("equal")
+                ax.spines['right'].set_visible(False)
+                ax.spines['top'].set_visible(False)
+                ax.yaxis.set_ticks_position('left')
+                ax.xaxis.set_ticks_position('bottom')
+
+                fig.canvas.draw()
+                velocityWindow.tkraise()
+                
             def runInversion():
 
                 if self.tomoPlot:
@@ -1177,7 +1220,10 @@ E-mail: vjs279@hotmail.com
             
             
             
-            button = Button(tomoWindow, text="View mesh", command=viewMesh).grid(row=5,column=0,columnspan=2,pady=5,sticky="E")
+            button = Button(tomoWindow, text="View mesh", command=viewMesh).grid(row=5,column=0,columnspan=1,pady=5,sticky="E")
+            
+            button = Button(tomoWindow, text="Load VTK", command=view_velocity_model).grid(row=5,column=1,columnspan=1,pady=5,sticky="E")
+            
 
             Label(tomoWindow, text="Inversion options", font=("Arial", 11)).grid(row=6,column=0,columnspan=2,pady=10,sticky="E")
             
