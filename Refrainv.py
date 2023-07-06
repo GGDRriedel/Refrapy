@@ -1366,7 +1366,7 @@ E-mail: vjs279@hotmail.com
                 outFile.write("Maximum velocity limit %.2f\n"%(self.parameters_tomo[8]))
                 outFile.write("# of secondary nodes %d\n"%(self.parameters_tomo[9]))
                 outFile.write("Maximum # of iterations %d\n"%(self.parameters_tomo[10]))
-                outFile.write("Actually done # of iterations %d\n\•n"%(self.parameters_tomo[17]))
+                outFile.write("Actually done # of iterations %d\n\n"%(self.parameters_tomo[17]))
                 outFile.write("Contour plot options\n")
                 outFile.write("# of nodes for gridding (x) %d\n"%(self.parameters_tomo[11]))
                 outFile.write("# of nodes for gridding (y) %d\n"%(self.parameters_tomo[12]))
