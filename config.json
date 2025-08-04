@@ -1,0 +1,17 @@
+{
+  "depth": "100",
+  "dx": "0.33",
+  "cellseize": "15",
+  "quality": "32",
+  "lamda": "10",
+  "zweight": "0.5",
+  "vtop": "400",
+  "vbottom": "4000",
+  "minvel": "200",
+  "maxvel": "5000",
+  "secnodes": "3",
+  "maxiter": "20",
+  "gridx": "1000",
+  "gridy": "1000",
+  "nlevels": "20"
+}
