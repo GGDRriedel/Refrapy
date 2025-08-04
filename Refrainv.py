@@ -28,6 +28,7 @@ import os
 from datetime import datetime
 import numpy as np
 import pandas as pd
+import json 
 #own modules
 from dtreader import dtreader
 
@@ -976,8 +977,8 @@ E-mail: vjs279@hotmail.com
             tomoWindow = Toplevel(self)
             tomoWindow.title('Refrainv - Tomography')
             tomoWindow.configure(bg = "#F0F0F0")
-            tomoWindow.geometry("300x680")
-            tomoWindow.resizable(0,True)
+            tomoWindow.geometry("350x680")
+            tomoWindow.resizable(True,True)
             #check if on windows with nt kernel:
             if "nt" in name:
                 tomoWindow.iconbitmap("%s/images/ico_refrapy.ico"%getcwd())
@@ -1209,22 +1210,48 @@ E-mail: vjs279@hotmail.com
 
                     offsets.append(abs(self.sources[i]-x))
             #set standards, if conditions in case we are in second run during execution
+            # if not hasattr(self,"tomostandards"):
+                # self.tomostandards={"depth":str(max(offsets)/3),
+                               # "dx":"0.33",
+                               # "cellseize":str(3*(self.gx[1]-self.gx[0])),
+                               # "quality":"32",
+                               # "lamda":"100",
+                               # "zweight":"0.2",
+                               # "vtop":"300",
+                               # "vbottom":"3000",
+                               # "minvel":"100",
+                               # "maxvel":"4000",
+                               # "secnodes":"3",
+                               # "maxiter":"10",
+                               # "gridx":"1000",
+                               # "gridy":"1000",
+                               # "nlevels":"20"}
+            # #load from config
             if not hasattr(self,"tomostandards"):
-                self.tomostandards={"depth":str(max(offsets)/3),
-                               "dx":"0.33",
-                               "cellseize":str(3*(self.gx[1]-self.gx[0])),
-                               "quality":"32",
-                               "lamda":"100",
-                               "zweight":"0.2",
-                               "vtop":"300",
-                               "vbottom":"3000",
-                               "minvel":"100",
-                               "maxvel":"4000",
-                               "secnodes":"3",
-                               "maxiter":"10",
-                               "gridx":"1000",
-                               "gridy":"1000",
-                               "nlevels":"20"}
+            
+                try:
+                    config_path=self.projPath+"/"+"config.json"
+                    with open(config_path, "r") as f:
+                        self.tomostandards = json.load(f)
+                except Exception as e:
+                    print(f"Failed to load tomo standards config: {e}")
+                    self.tomostandards = {
+                    "depth": str(max(offsets) / 3),
+                    "dx": "0.33",
+                    "cellseize": str(3 * (self.gx[1] - self.gx[0])),
+                    "quality": "32",
+                    "lamda": "100",
+                    "zweight": "0.2",
+                    "vtop": "300",
+                    "vbottom": "3000",
+                    "minvel": "100",
+                    "maxvel": "4000",
+                    "secnodes": "3",
+                    "maxiter": "10",
+                    "gridx": "1000",
+                    "gridy": "1000",
+                    "nlevels": "20"
+                                        }
             
             Label(tomoWindow, text="Mesh options", font=("Arial", 11)).grid(row=0,column=0,columnspan=2,pady=10,sticky="E")
             
@@ -1233,7 +1260,7 @@ E-mail: vjs279@hotmail.com
             maxDepth_entry.grid(row=1,column=1,pady=5)
             maxDepth_entry.insert(0, self.tomostandards["depth"])#str(max(offsets)*0.4))#str(int((self.gx[-1]-self.gx[0])*0.4)))
 
-            Label(tomoWindow, text = "# of nodes between receivers").grid(row=2,column=0,pady=5,sticky="E")
+            Label(tomoWindow, text = "Node every # times receiver distance:").grid(row=2,column=0,pady=5,sticky="E")
             paraDX_entry = Entry(tomoWindow,width=6)
             paraDX_entry.grid(row=2,column=1,pady=5)
             paraDX_entry.insert(0,self.tomostandards["dx"])
@@ -1355,7 +1382,7 @@ E-mail: vjs279@hotmail.com
                 outFile.write("%s - Traveltimes tomography parameters\n\n"%self.lineName)
                 outFile.write("Mesh options\n")
                 outFile.write("Maximum depth %.2f\n"%(self.parameters_tomo[0]))
-                outFile.write("# of nodes between receivers %.2f\n"%(self.parameters_tomo[1]))
+                outFile.write("Nodes created every # times receiver-distance  %.2f\n"%(self.parameters_tomo[1]))
                 outFile.write("Maximum cell size %.2f\n\n"%(self.parameters_tomo[2]))
                 outFile.write("Inversion options\n")
                 outFile.write("Smoothing (lam) %.2f\n"%(self.parameters_tomo[3]))
@@ -1366,7 +1393,7 @@ E-mail: vjs279@hotmail.com
                 outFile.write("Maximum velocity limit %.2f\n"%(self.parameters_tomo[8]))
                 outFile.write("# of secondary nodes %d\n"%(self.parameters_tomo[9]))
                 outFile.write("Maximum # of iterations %d\n"%(self.parameters_tomo[10]))
-                outFile.write("Actually done # of iterations %d\n\•n"%(self.parameters_tomo[17]))
+                outFile.write("Actually done # of iterations %d\n\n"%(self.parameters_tomo[17]))
                 outFile.write("Contour plot options\n")
                 outFile.write("# of nodes for gridding (x) %d\n"%(self.parameters_tomo[11]))
                 outFile.write("# of nodes for gridding (y) %d\n"%(self.parameters_tomo[12]))
