@@ -28,6 +28,7 @@ import os
 from datetime import datetime
 import numpy as np
 import pandas as pd
+import json 
 #own modules
 from dtreader import dtreader
 
@@ -977,7 +978,7 @@ E-mail: vjs279@hotmail.com
             tomoWindow.title('Refrainv - Tomography')
             tomoWindow.configure(bg = "#F0F0F0")
             tomoWindow.geometry("350x680")
-            tomoWindow.resizable(0,True)
+            tomoWindow.resizable(True,True)
             #check if on windows with nt kernel:
             if "nt" in name:
                 tomoWindow.iconbitmap("%s/images/ico_refrapy.ico"%getcwd())
@@ -1209,22 +1210,48 @@ E-mail: vjs279@hotmail.com
 
                     offsets.append(abs(self.sources[i]-x))
             #set standards, if conditions in case we are in second run during execution
+            # if not hasattr(self,"tomostandards"):
+                # self.tomostandards={"depth":str(max(offsets)/3),
+                               # "dx":"0.33",
+                               # "cellseize":str(3*(self.gx[1]-self.gx[0])),
+                               # "quality":"32",
+                               # "lamda":"100",
+                               # "zweight":"0.2",
+                               # "vtop":"300",
+                               # "vbottom":"3000",
+                               # "minvel":"100",
+                               # "maxvel":"4000",
+                               # "secnodes":"3",
+                               # "maxiter":"10",
+                               # "gridx":"1000",
+                               # "gridy":"1000",
+                               # "nlevels":"20"}
+            # #load from config
             if not hasattr(self,"tomostandards"):
-                self.tomostandards={"depth":str(max(offsets)/3),
-                               "dx":"0.33",
-                               "cellseize":str(3*(self.gx[1]-self.gx[0])),
-                               "quality":"32",
-                               "lamda":"100",
-                               "zweight":"0.2",
-                               "vtop":"300",
-                               "vbottom":"3000",
-                               "minvel":"100",
-                               "maxvel":"4000",
-                               "secnodes":"3",
-                               "maxiter":"10",
-                               "gridx":"1000",
-                               "gridy":"1000",
-                               "nlevels":"20"}
+            
+                try:
+                    config_path=self.projPath+"/"+"config.json"
+                    with open(config_path, "r") as f:
+                        self.tomostandards = json.load(f)
+                except Exception as e:
+                    print(f"Failed to load tomo standards config: {e}")
+                    self.tomostandards = {
+                    "depth": str(max(offsets) / 3),
+                    "dx": "0.33",
+                    "cellseize": str(3 * (self.gx[1] - self.gx[0])),
+                    "quality": "32",
+                    "lamda": "100",
+                    "zweight": "0.2",
+                    "vtop": "300",
+                    "vbottom": "3000",
+                    "minvel": "100",
+                    "maxvel": "4000",
+                    "secnodes": "3",
+                    "maxiter": "10",
+                    "gridx": "1000",
+                    "gridy": "1000",
+                    "nlevels": "20"
+                                        }
             
             Label(tomoWindow, text="Mesh options", font=("Arial", 11)).grid(row=0,column=0,columnspan=2,pady=10,sticky="E")
             
