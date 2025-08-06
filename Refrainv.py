@@ -11,12 +11,13 @@ from matplotlib.lines import Line2D
 from matplotlib.colors import is_color_like
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
-from tkinter import Tk, Toplevel, Frame, Button, Label, filedialog, messagebox, PhotoImage, simpledialog, Entry
+from tkinter import Tk, Toplevel, Frame, Button, Label, filedialog, messagebox, PhotoImage, simpledialog, Entry, Canvas, Scrollbar
 from os import path, makedirs, getcwd, name
 from obspy import read
 from obspy.signal.filter import lowpass, highpass
 from scipy.signal import resample
 from scipy.interpolate import interp1d,griddata
+from scipy.spatial import ConvexHull
 from numpy import array, where, polyfit, linspace, meshgrid, column_stack, c_, savetxt, shape,reshape,concatenate, hstack, linalg, mean, sqrt, zeros, arange, linspace, square, sort, unique
 from numpy import all as np_all
 from Pmw import initialise, Balloon
@@ -266,6 +267,8 @@ E-mail: vjs279@hotmail.com
         self.timeterms_3d_ready = False
         self.showMerged = False
         self.z2elev = False
+        self.startModel = None
+        self.startModelPath = None
         self.__dict__.pop('tomostandards',None)
     
     def kill(self):
@@ -977,7 +980,7 @@ E-mail: vjs279@hotmail.com
             tomoWindow = Toplevel(self)
             tomoWindow.title('Refrainv - Tomography')
             tomoWindow.configure(bg = "#F0F0F0")
-            tomoWindow.geometry("350x680")
+            tomoWindow.geometry("400x600")
             tomoWindow.resizable(True,True)
             #check if on windows with nt kernel:
             if "nt" in name:
@@ -986,6 +989,34 @@ E-mail: vjs279@hotmail.com
             else:
                 tomoWindow.iconbitmap("@"+getcwd()+"/images/ico_refrapy.xbm")
             #tomoWindow.iconbitmap("%s/images/ico_refrapy.ico"%getcwd())
+            
+            # Create main frame with scrollbar
+            main_frame = Frame(tomoWindow)
+            main_frame.pack(fill="both", expand=True)
+            
+            # Create canvas and scrollbar
+            canvas = Canvas(main_frame, bg="#F0F0F0")
+            scrollbar = Scrollbar(main_frame, orient="vertical", command=canvas.yview)
+            scrollable_frame = Frame(canvas, bg="#F0F0F0")
+            
+            scrollable_frame.bind(
+                "<Configure>",
+                lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+            )
+            
+            canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+            canvas.configure(yscrollcommand=scrollbar.set)
+            
+            # Pack canvas and scrollbar
+            canvas.pack(side="left", fill="both", expand=True)
+            scrollbar.pack(side="right", fill="y")
+            
+            # Bind mousewheel to canvas for scrolling
+            def _on_mousewheel(event):
+                canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            canvas.bind_all("<MouseWheel>", _on_mousewheel)
+            
+            # Now use scrollable_frame instead of tomoWindow for all widgets
 
             def viewMesh():
 
@@ -1043,6 +1074,127 @@ E-mail: vjs279@hotmail.com
                 #print(m.yMin())
                 #print(m.yMax())
 
+            def loadStartModel():
+                """Load a VTK start model from a previous inversion"""
+                try:
+                    start_model_path = filedialog.askopenfilename(
+                        title="Select VTK Start Model File",
+                        initialdir=self.projPath,
+                        filetypes=[("VTK Files", "*.vtk"), ("All Files", "*.*")]
+                    )
+                    
+                    if start_model_path:
+                        # Load the VTK file using pygimli
+                        start_mesh = pg.load(start_model_path)
+                        
+                        # Extract velocity data from the mesh (usually stored as 'Velocity' or 'v')
+                        velocity_data = None
+                        if start_mesh.haveData('Velocity'):
+                            velocity_data = start_mesh['Velocity']
+                        elif start_mesh.haveData('v'):
+                            velocity_data = start_mesh['v']
+                        elif start_mesh.haveData('slowness'):
+                            velocity_data = 1.0 / start_mesh['slowness']
+                        else:
+                            # Try to get any data that might be velocity
+                            data_keys = start_mesh.dataKeys()
+                            if data_keys:
+                                velocity_data = start_mesh[data_keys[0]]
+                                messagebox.showwarning("Refrainv", 
+                                    f"Using data field '{data_keys[0]}' as velocity. Please verify this is correct.")
+                        
+                        if velocity_data is not None:
+                            self.startModel = velocity_data
+                            self.startModelPath = start_model_path
+                            startmodel_label.config(text=f"Loaded: {path.basename(start_model_path)}")
+                            messagebox.showinfo("Refrainv", "Start model loaded successfully!")
+                        else:
+                            messagebox.showerror("Refrainv", "No velocity data found in the VTK file!")
+                            
+                except Exception as e:
+                    messagebox.showerror("Refrainv", f"Error loading start model: {str(e)}")
+                    
+                tomoWindow.tkraise()
+            
+            def clearStartModel():
+                """Clear the loaded start model"""
+                self.startModel = None
+                self.startModelPath = None
+                startmodel_label.config(text="No start model loaded")
+                messagebox.showinfo("Refrainv", "Start model cleared!")
+                tomoWindow.tkraise()
+            
+            def showStartModel():
+                """Display the loaded start model in a separate window"""
+                if self.startModel is None:
+                    messagebox.showwarning("Refrainv", "No start model loaded!")
+                    tomoWindow.tkraise()
+                    return
+                
+                try:
+                    # Load the mesh from the VTK file
+                    start_mesh = pg.load(self.startModelPath)
+                    
+                    # Create a new window to show the start model
+                    startModelWindow = Toplevel(self)
+                    startModelWindow.title('Refrainv - Start Model Preview')
+                    startModelWindow.configure(bg="#F0F0F0")
+                    startModelWindow.geometry("800x600")
+                    startModelWindow.resizable(True, True)
+                    
+                    # Set icon
+                    if "nt" in name:
+                        startModelWindow.iconbitmap("%s/images/ico_refrapy.ico"%getcwd())
+                    else:
+                        startModelWindow.iconbitmap("@"+getcwd()+"/images/ico_refrapy.xbm")
+                    
+                    # Create matplotlib figure
+                    frame = Frame(startModelWindow)
+                    frame.grid(row=0, column=0, sticky="NSEW")
+                    
+                    fig = plt.figure(figsize=(10, 8))
+                    fig.patch.set_facecolor('#F0F0F0')
+                    canvas = FigureCanvasTkAgg(fig, frame)
+                    canvas.draw()
+                    toolbar = NavigationToolbar2Tk(canvas, frame)
+                    toolbar.update()
+                    canvas._tkcanvas.pack(fill="both", expand=True)
+                    
+                    # Create subplot
+                    ax = fig.add_subplot(111)
+                    
+                    # Show the start model using pygimli
+                    pg.show(start_mesh, self.startModel, ax=ax, cMap=self.colormap, 
+                           label="Velocity [m/s]", showMesh=True)
+                    
+                    ax.set_title(f"Start Model: {path.basename(self.startModelPath)}")
+                    ax.set_xlabel("Distance [m]")
+                    ax.set_ylabel("Depth [m]" if not self.z2elev else "Elevation [m]")
+                    
+                    if self.showGrid:
+                        ax.grid(lw=0.5, alpha=0.5)
+                    
+                    ax.set_aspect("equal")
+                    
+                    # Add some statistics - convert PyGimli RVector to NumPy array first
+                    import numpy as np
+                    vel_array = np.array(self.startModel)
+                    vel_min = float(vel_array.min())
+                    vel_max = float(vel_array.max())
+                    vel_mean = float(vel_array.mean())
+                    
+                    stats_text = f"Min: {vel_min:.0f} m/s\nMax: {vel_max:.0f} m/s\nMean: {vel_mean:.0f} m/s\nCells: {len(self.startModel)}"
+                    ax.text(0.02, 0.98, stats_text, transform=ax.transAxes, 
+                           verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+                    
+                    fig.tight_layout()
+                    fig.canvas.draw()
+                    startModelWindow.tkraise()
+                    
+                except Exception as e:
+                    messagebox.showerror("Refrainv", f"Error displaying start model: {str(e)}")
+                    tomoWindow.tkraise()
+
             def runInversion():
 
                 if self.tomoPlot:
@@ -1074,8 +1226,42 @@ E-mail: vjs279@hotmail.com
                 yngrid=yngrid_entry.get()
                 nlevels=nlevels_entry.get()
                 
-                vest = self.mgr.invert(data=self.data_pg,mesh=self.tomoMesh,verbose=True,lam=lam,zWeight=zWeigh,useGradient=True,
-                               vTop=vTop,vBottom=vBottom,maxIter=maxIter,limits=[minVelLimit,maxVelLimit],secNodes=secNodes)
+                # Prepare inversion parameters
+                invert_kwargs = {
+                    'data': self.data_pg,
+                    'mesh': self.tomoMesh,
+                    'verbose': True,
+                    'lam': lam,
+                    'zWeight': zWeigh,
+                    'useGradient': True,
+                    'vTop': vTop,
+                    'vBottom': vBottom,
+                    'maxIter': maxIter,
+                    'limits': [minVelLimit, maxVelLimit],
+                    'secNodes': secNodes
+                }
+                
+                # Add start model if available
+                if self.startModel is not None:
+                    try:
+                        # Interpolate start model to current mesh if needed
+                        if len(self.startModel) != self.tomoMesh.cellCount():
+                            messagebox.showwarning("Refrainv", 
+                                "Start model mesh size differs from current mesh. Interpolating...")
+                            # Simple interpolation - in practice you might want more sophisticated interpolation
+                            start_model_interp = pg.interpolate(self.startModel, 
+                                                               srcMesh=pg.load(self.startModelPath), 
+                                                               destMesh=self.tomoMesh)
+                            invert_kwargs['startModel'] = start_model_interp
+                        else:
+                            invert_kwargs['startModel'] = self.startModel
+                            
+                        messagebox.showinfo("Refrainv", "Using loaded start model for inversion.")
+                    except Exception as e:
+                        messagebox.showwarning("Refrainv", 
+                            f"Could not use start model: {str(e)}. Proceeding without start model.")
+                
+                vest = self.mgr.invert(**invert_kwargs)
                              
                 #keep entered options
                  
@@ -1253,92 +1439,102 @@ E-mail: vjs279@hotmail.com
                     "nlevels": "20"
                                         }
             
-            Label(tomoWindow, text="Mesh options", font=("Arial", 11)).grid(row=0,column=0,columnspan=2,pady=10,sticky="E")
+            Label(scrollable_frame, text="Mesh options", font=("Arial", 11)).grid(row=0,column=0,columnspan=2,pady=10,sticky="E")
             
-            Label(tomoWindow, text = "Maximum depth (max offset = %.2f m)"%max(offsets)).grid(row=1,column=0,pady=5,sticky="E")
-            maxDepth_entry = Entry(tomoWindow,width=6)
+            Label(scrollable_frame, text = "Maximum depth (max offset = %.2f m)"%max(offsets)).grid(row=1,column=0,pady=5,sticky="E")
+            maxDepth_entry = Entry(scrollable_frame,width=6)
             maxDepth_entry.grid(row=1,column=1,pady=5)
             maxDepth_entry.insert(0, self.tomostandards["depth"])#str(max(offsets)*0.4))#str(int((self.gx[-1]-self.gx[0])*0.4)))
 
-            Label(tomoWindow, text = "Node every # times receiver distance:").grid(row=2,column=0,pady=5,sticky="E")
-            paraDX_entry = Entry(tomoWindow,width=6)
+            Label(scrollable_frame, text = "Node every # times receiver distance:").grid(row=2,column=0,pady=5,sticky="E")
+            paraDX_entry = Entry(scrollable_frame,width=6)
             paraDX_entry.grid(row=2,column=1,pady=5)
             paraDX_entry.insert(0,self.tomostandards["dx"])
 
-            Label(tomoWindow, text = "Maximum cell size").grid(row=3,column=0,pady=5,sticky="E")
-            paraMaxCellSize_entry = Entry(tomoWindow,width=6)
+            Label(scrollable_frame, text = "Maximum cell size").grid(row=3,column=0,pady=5,sticky="E")
+            paraMaxCellSize_entry = Entry(scrollable_frame,width=6)
             paraMaxCellSize_entry.grid(row=3,column=1,pady=5)
             paraMaxCellSize_entry.insert(0,self.tomostandards["cellseize"])
             
-            Label(tomoWindow, text = "Quality Parameter").grid(row=4,column=0,pady=5,sticky="E")
-            paraQuality_entry = Entry(tomoWindow,width=6)
+            Label(scrollable_frame, text = "Quality Parameter").grid(row=4,column=0,pady=5,sticky="E")
+            paraQuality_entry = Entry(scrollable_frame,width=6)
             paraQuality_entry.grid(row=4,column=1,pady=5)
             paraQuality_entry.insert(0,self.tomostandards["quality"])            
             
             
             
-            button = Button(tomoWindow, text="View mesh", command=viewMesh).grid(row=5,column=0,columnspan=2,pady=5,sticky="E")
+            button = Button(scrollable_frame, text="View mesh", command=viewMesh).grid(row=5,column=0,columnspan=2,pady=5,sticky="E")
 
-            Label(tomoWindow, text="Inversion options", font=("Arial", 11)).grid(row=6,column=0,columnspan=2,pady=10,sticky="E")
+            Label(scrollable_frame, text="Inversion options", font=("Arial", 11)).grid(row=6,column=0,columnspan=2,pady=10,sticky="E")
             
-            Label(tomoWindow, text = "Smoothing (lam)").grid(row=7,column=0,pady=5,sticky="E")
-            lam_entry = Entry(tomoWindow,width=6)
+            Label(scrollable_frame, text = "Smoothing (lam)").grid(row=7,column=0,pady=5,sticky="E")
+            lam_entry = Entry(scrollable_frame,width=6)
             lam_entry.grid(row=7,column=1,pady=5)
             lam_entry.insert(0,self.tomostandards["lamda"])
 
-            Label(tomoWindow, text = "Vertical to horizontal smoothing (zweigh)").grid(row=8,column=0,pady=5,sticky="E")
-            zWeigh_entry = Entry(tomoWindow,width=6)
+            Label(scrollable_frame, text = "Vertical to horizontal smoothing (zweigh)").grid(row=8,column=0,pady=5,sticky="E")
+            zWeigh_entry = Entry(scrollable_frame,width=6)
             zWeigh_entry.grid(row=8,column=1,pady=5)
             zWeigh_entry.insert(0,self.tomostandards["zweight"])
 
-            Label(tomoWindow, text = "Velocity at the top of the model").grid(row=9,column=0,pady=5,sticky="E")
-            vTop_entry = Entry(tomoWindow,width=6)
+            Label(scrollable_frame, text = "Velocity at the top of the model").grid(row=9,column=0,pady=5,sticky="E")
+            vTop_entry = Entry(scrollable_frame,width=6)
             vTop_entry.grid(row=9,column=1,pady=5)
             vTop_entry.insert(0,self.tomostandards["vtop"])
             
-            Label(tomoWindow, text = "Velocity at the bottom of the model").grid(row=10,column=0,pady=5,sticky="E")
-            vBottom_entry = Entry(tomoWindow,width=6)
+            Label(scrollable_frame, text = "Velocity at the bottom of the model").grid(row=10,column=0,pady=5,sticky="E")
+            vBottom_entry = Entry(scrollable_frame,width=6)
             vBottom_entry.grid(row=10,column=1,pady=5)
             vBottom_entry.insert(0,self.tomostandards["vbottom"])
 
-            Label(tomoWindow, text = "Minimum velocity limit").grid(row=11,column=0,pady=5,sticky="E")
-            minVelLimit_entry = Entry(tomoWindow,width=6)
+            Label(scrollable_frame, text = "Minimum velocity limit").grid(row=11,column=0,pady=5,sticky="E")
+            minVelLimit_entry = Entry(scrollable_frame,width=6)
             minVelLimit_entry.grid(row=11,column=1,pady=5)
             minVelLimit_entry.insert(0,self.tomostandards["minvel"])
 
-            Label(tomoWindow, text = "Maximum velocity limit").grid(row=12,column=0,pady=5,sticky="E")
-            maxVelLimit_entry = Entry(tomoWindow,width=6)
+            Label(scrollable_frame, text = "Maximum velocity limit").grid(row=12,column=0,pady=5,sticky="E")
+            maxVelLimit_entry = Entry(scrollable_frame,width=6)
             maxVelLimit_entry.grid(row=12,column=1,pady=5)
             maxVelLimit_entry.insert(0,self.tomostandards["maxvel"])
 
-            Label(tomoWindow, text = "# of secondary nodes").grid(row=13,column=0,pady=5,sticky="E")
-            secNodes_entry = Entry(tomoWindow,width=6)
+            Label(scrollable_frame, text = "# of secondary nodes").grid(row=13,column=0,pady=5,sticky="E")
+            secNodes_entry = Entry(scrollable_frame,width=6)
             secNodes_entry.grid(row=13,column=1,pady=5)
             secNodes_entry.insert(0,self.tomostandards["secnodes"])
 
-            Label(tomoWindow, text = "Maximum # of iterations").grid(row=14,column=0,pady=5,sticky="E")
-            maxIter_entry = Entry(tomoWindow,width=6)
+            Label(scrollable_frame, text = "Maximum # of iterations").grid(row=14,column=0,pady=5,sticky="E")
+            maxIter_entry = Entry(scrollable_frame,width=6)
             maxIter_entry.grid(row=14,column=1,pady=5)
             maxIter_entry.insert(0,self.tomostandards["maxiter"])
 
-            Label(tomoWindow, text="Contour plot options", font=("Arial", 11)).grid(row=15,column=0,columnspan=2,pady=10,sticky="E")
+            # Start model section
+            Label(scrollable_frame, text="Start Model", font=("Arial", 11)).grid(row=15,column=0,columnspan=2,pady=10,sticky="E")
             
-            Label(tomoWindow, text = "# of nodes for gridding (x)").grid(row=16,column=0,pady=5,sticky="E")
-            xngrid_entry = Entry(tomoWindow,width=6)
-            xngrid_entry.grid(row=16,column=1,pady=5)
+            startmodel_label = Label(scrollable_frame, text="No start model loaded", fg="gray")
+            startmodel_label.grid(row=16,column=0,columnspan=2,pady=5,sticky="EW")
+            
+            Button(scrollable_frame, text="Load VTK Start Model", command=loadStartModel).grid(row=17,column=0,pady=5,sticky="E")
+            Button(scrollable_frame, text="Clear Start Model", command=clearStartModel).grid(row=17,column=1,pady=5,sticky="W")
+            Button(scrollable_frame, text="Show Start Model", command=showStartModel).grid(row=18,column=0,columnspan=2,pady=5,sticky="EW")
+            
+            Label(scrollable_frame, text="Contour plot options", font=("Arial", 11)).grid(row=19,column=0,columnspan=2,pady=10,sticky="E")
+            
+            Label(scrollable_frame, text = "# of nodes for gridding (x)").grid(row=20,column=0,pady=5,sticky="E")
+            xngrid_entry = Entry(scrollable_frame,width=6)
+            xngrid_entry.grid(row=20,column=1,pady=5)
             xngrid_entry.insert(0,self.tomostandards["gridx"])
 
-            Label(tomoWindow, text = "# of nodes for gridding (y)").grid(row=17,column=0,pady=5,sticky="E")
-            yngrid_entry = Entry(tomoWindow,width=6)
-            yngrid_entry.grid(row=17,column=1,pady=5)
+            Label(scrollable_frame, text = "# of nodes for gridding (y)").grid(row=21,column=0,pady=5,sticky="E")
+            yngrid_entry = Entry(scrollable_frame,width=6)
+            yngrid_entry.grid(row=21,column=1,pady=5)
             yngrid_entry.insert(0,self.tomostandards["gridy"])
 
-            Label(tomoWindow, text = "# of contour levels").grid(row=18,column=0,pady=5,sticky="E")
-            nlevels_entry = Entry(tomoWindow,width=6)
-            nlevels_entry.grid(row=18,column=1,pady=5)
+            Label(scrollable_frame, text = "# of contour levels").grid(row=22,column=0,pady=5,sticky="E")
+            nlevels_entry = Entry(scrollable_frame,width=6)
+            nlevels_entry.grid(row=22,column=1,pady=5)
             nlevels_entry.insert(0,self.tomostandards["nlevels"])
             
-            button = Button(tomoWindow, text="Run inversion", command=runInversion).grid(row=19,column=0,columnspan=2,pady=5,sticky="E")
+            button = Button(scrollable_frame, text="Run inversion", command=runInversion).grid(row=23,column=0,columnspan=2,pady=5,sticky="E")
 
             tomoWindow.tkraise()
 
@@ -1361,9 +1557,13 @@ E-mail: vjs279@hotmail.com
           
             #get the paths:
                 
+
+           
+                  
             if hasattr(self, 'RayPaths'):
                 pathcount=len(self.RayPaths.get_paths())
                 
+                # Export individual raypaths
                 with open(self.projPath+"/models/"+nowstring+"/%s_raypaths.bln"%(self.lineName),mode='w+') as f:
                     for i in range(pathcount):
                        patharray=self.RayPaths.get_paths()[i].vertices
@@ -1371,7 +1571,51 @@ E-mail: vjs279@hotmail.com
                        f.write(str(n)+',-1\n')
                        pd.DataFrame(patharray).to_csv(path_or_buf=f,sep=',',header=False,index=False,line_terminator='\n')
                        f.write('\n')
-                       
+                
+                # Generate and export raypath hull
+                try:
+                    # Collect all raypath points
+                    all_points = []
+                    buffer=10
+                    for i in range(pathcount):
+                        patharray = self.RayPaths.get_paths()[i].vertices
+                        all_points.extend(patharray)
+                    
+                    if len(all_points) >= 3:  # ConvexHull needs at least 3 points
+                        all_points = np.array(all_points)
+                        
+                        # Generate convex hull
+                        hull = ConvexHull(all_points)
+                        hull_points = all_points[hull.vertices]
+                        #first point is the upperrightmost one
+                        #create the points of the "outside" poly:
+                        upper_rightest=(hull_points[0][0]+2*buffer,hull_points[0][1]+2*buffer)
+                        upper_2ndrightest=(hull_points[0][0]+buffer,hull_points[0][1]+buffer)
+                        upper_lefttest=(hull_points[1][0]-2*buffer,hull_points[0][1]+2*buffer)
+                        upper_2ndlefttest=(hull_points[1][0]-buffer,hull_points[0][1]+2*buffer)
+                        
+                        lower_left=(hull_points[1][0]-2*buffer,self.tomoModel_z.min-buffer)
+                        lower_right=(hull_points[0][0]+2*buffer,self.tomoModel_z.min-buffer)
+                        # Export hull as BLN file (Surfer compatible format)
+                        with open(self.projPath+"/models/"+nowstring+"/%s_raypaths_hull.bln"%(self.lineName), 'w') as f:
+                            # For Surfer BLN format: number of points (including closing point), flag (1 for closed polygon)
+                            n_hull_points = len(hull_points) + 1  # +1 for closing the polygon
+                            f.write(f"{n_hull_points}, 1\n")  # Space after comma for better compatibility
+                            
+                            # Write all hull points
+                            for point in hull_points:
+                                f.write(f"{point[0]:.6f}, {point[1]:.6f}\n")  # Space after comma
+                            
+                            # Close the polygon by adding the first point at the end
+                            f.write(f"{hull_points[0][0]:.6f}, {hull_points[0][1]:.6f}\n")
+                            
+                        print(f"Raypath hull exported with {n_hull_points} points")
+                    else:
+                        print("Not enough points to generate raypath hull")
+                        
+                except Exception as e:
+                    print(f"Error generating raypath hull: {e}")
+
                        
                     
             
