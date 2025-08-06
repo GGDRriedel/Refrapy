@@ -175,6 +175,85 @@ class Refrainv(Tk):
         self.protocol("WM_DELETE_WINDOW", self.kill)
         self.initiateVariables()
 
+    def batchTomography(self):
+        """Run tomography inversion for a range of parameters."""
+        # Dialog to get parameter ranges
+        batchWindow = Toplevel(self)
+        batchWindow.title('Refrainv - Batch Tomography')
+        batchWindow.geometry("400x400")
+        batchWindow.configure(bg="#F0F0F0")
+
+        Label(batchWindow, text="Smoothing (lam) range (min,max,step):").pack()
+        lam_entry = Entry(batchWindow)
+        lam_entry.pack()
+        lam_entry.insert(0, "10,200,10")
+
+        Label(batchWindow, text="Cell size range (min,max,step):").pack()
+        cell_entry = Entry(batchWindow)
+        cell_entry.pack()
+        cell_entry.insert(0, "2,10,2")
+
+        Label(batchWindow, text="Vertical/horizontal smoothing (zweight) range (min,max,step):").pack()
+        zweight_entry = Entry(batchWindow)
+        zweight_entry.pack()
+        zweight_entry.insert(0, "0.1,0.5,0.1")
+        abel(batchWindow, text="This will run a batched inversion with the program STANDARD parameters. \n If you have not provieded these with a .json, internal standards will be used. ").pack()
+        Button(batchWindow, text="Run batch", command=lambda: runBatch()).pack(pady=10)
+
+        def runBatch():
+            try:
+                lam_min, lam_max, lam_step = map(float, lam_entry.get().split(","))
+                cell_min, cell_max, cell_step = map(float, cell_entry.get().split(","))
+                zw_min, zw_max, zw_step = map(float, zweight_entry.get().split(","))
+            except Exception as e:
+                messagebox.showerror("Refrainv", f"Invalid input: {e}")
+                return
+
+            lam_values = np.arange(lam_min, lam_max + lam_step, lam_step)
+            cell_values = np.arange(cell_min, cell_max + cell_step, cell_step)
+            zw_values = np.arange(zw_min, zw_max + zw_step, zw_step)
+
+            total_runs = len(lam_values) * len(cell_values) * len(zw_values)
+            progress = tqdm(total=total_runs, desc="Batch inversion")
+
+            for lam in lam_values:
+                for cell in cell_values:
+                    for zw in zw_values:
+                        # Set up mesh and inversion parameters
+                        maxDepth = float(self.tomostandards["depth"])
+                        paraDX = float(self.tomostandards["dx"])
+                        paraMaxCellSize = cell
+                        paraQuality = float(self.tomostandards["quality"])
+                        self.tomoMesh = self.mgr.createMesh(data=self.data_pg, paraDepth=maxDepth, paraDX=paraDX, paraMaxCellSize=paraMaxCellSize, quality=paraQuality)
+                        invert_kwargs = {
+                            'data': self.data_pg,
+                            'mesh': self.tomoMesh,
+                            'verbose': False,
+                            'lam': lam,
+                            'zWeight': zw,
+                            'useGradient': True,
+                            'vTop': float(self.tomostandards["vtop"]),
+                            'vBottom': float(self.tomostandards["vbottom"]),
+                            'maxIter': int(self.tomostandards["maxiter"]),
+                            'limits': [float(self.tomostandards["minvel"]), float(self.tomostandards["maxvel"])],
+                            'secNodes': int(self.tomostandards["secnodes"])
+                        }
+                        # Optionally add start model logic here
+
+                        vest = self.mgr.invert(**invert_kwargs)
+                        # Save results with parameter info
+                        param_str = f"lam{lam}_cell{cell}_zw{zw}"
+                        outdir = os.path.join(self.projPath, "models", param_str)
+                        # Regular pygimli save
+                        self.mgr.saveResult(outdir)
+                        os.makedirs(outdir, exist_ok=True)
+                        np.savetxt(os.path.join(outdir, f"{self.lineName}_vel.txt"), vest)
+                        # Optionally save figures, statistics, etc.
+                        progress.update(1)
+            progress.close()
+            messagebox.showinfo("Refrainv", "Batch inversion finished!")
+            batchWindow.destroy()
+
     def help(self):
 
         helpWindow = Toplevel(self)
@@ -1795,7 +1874,7 @@ class Refrainv(Tk):
             nlevels_entry.insert(0,self.tomostandards["nlevels"])
             
             button = Button(scrollable_frame, text="Run inversion", command=runInversion).grid(row=23,column=0,columnspan=2,pady=5,sticky="E")
-
+            Button(scrollable_frame, text="Batch inversion", command=self.batchTomography).grid(row=24,column=0,columnspan=2,pady=5,sticky="E")
 #            tomoWindow.tkraise()
 
     def saveResults(self):
