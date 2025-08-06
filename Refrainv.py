@@ -2,7 +2,8 @@
 ##Refrainv - Data inversion
 ##Author: Victor Guedes, MSc
 ##E-mail: vjs279@hotmail.com
-
+#import matplotlib
+#matplotlib.use('TkAgg')
 from matplotlib import pyplot as plt
 from matplotlib.path import Path
 from matplotlib.patches import PathPatch
@@ -192,19 +193,19 @@ class Refrainv(Tk):
 
 
 
-Refrainv provides tools for seismic refraction data inversion.
+        Refrainv provides tools for seismic refraction data inversion.
 
-If you use Refrapy in your work, please consider citing the following paper:
+        If you use Refrapy in your work, please consider citing the following paper:
 
-Guedes, V.J.C.B., Maciel, S.T.R., Rocha, M.P., 2022. Refrapy: A Python program for seismic refraction data analysis,
-Computers and Geosciences. https://doi.org/10.1016/j.cageo.2021.105020.
+            Guedes, V.J.C.B., Maciel, S.T.R., Rocha, M.P., 2022. Refrapy: A Python program for seismic refraction data analysis,
+            Computers and Geosciences. https://doi.org/10.1016/j.cageo.2021.105020.
 
-To report a bug and for more information, please visit github.com/viictorjs/Refrapy.
+    To report a bug and for more information, please visit github.com/viictorjs/Refrapy.
 
 
-Author: Victor Guedes, MSc
-E-mail: vjs279@hotmail.com
-""",font=("Arial", 11)).pack()
+    Author: Victor Guedes, MSc
+    E-mail: vjs279@hotmail.com
+        """,font=("Arial", 11)).pack()
         helpWindow.tkraise()
 
     
@@ -269,6 +270,7 @@ E-mail: vjs279@hotmail.com
         self.z2elev = False
         self.startModel = None
         self.startModelPath = None
+        self.velModel = None
         self.__dict__.pop('tomostandards',None)
     
     def kill(self):
@@ -568,7 +570,9 @@ E-mail: vjs279@hotmail.com
 
                         self.fig_data.canvas.draw()
                         messagebox.showinfo(title="Refrainv", message="Traveltimes data have been loaded successfully!")
-
+   
+    
+    
     def runTimeTerms(self):
 
         if self.layer1 and self.layer2 or self.layer1 and self.layer3:
@@ -786,6 +790,35 @@ E-mail: vjs279@hotmail.com
                 #messagebox.showinfo('Refrainv','Absolute RMSE = %.2f ms\nRelative RMSE = %.2f%%'%(rmse*1000,relrmse))
                 self.showFit()
     
+    
+    def interpolateVelModelToMesh(self, mesh):
+        """Interpolate the velocity model to the current mesh"""
+        try:
+            from scipy.interpolate import griddata
+            
+            # Get mesh cell centers
+            cell_centers = mesh.cellCenters()
+            mesh_x = np.array([cell_centers[i][0] for i in range(len(cell_centers))])
+            mesh_z = np.array([cell_centers[i][1] for i in range(len(cell_centers))])
+            mesh_points = np.column_stack([mesh_x, mesh_z])
+            
+            # Interpolate velocity values to mesh points
+            interpolated_vel = griddata(
+                self.velModel['points'], 
+                self.velModel['values'], 
+                mesh_points, 
+                method='linear',
+                fill_value=self.velModel['values'].mean()  # Use mean for extrapolation
+            )
+            
+            # Convert to PyGimli RVector if needed
+            if hasattr(pg, 'RVector'):
+                return pg.RVector(interpolated_vel)
+            else:
+                return interpolated_vel
+                
+        except Exception as e:
+            raise Exception(f"Failed to interpolate velocity model to mesh: {str(e)}")    
     def layersInterpretation(self):
 
         if self.data_pg:
@@ -1073,7 +1106,206 @@ E-mail: vjs279@hotmail.com
                 #print(m.dimension)
                 #print(m.yMin())
                 #print(m.yMax())
-
+            def showInterpolatedVelMesh( mesh, interpolated_vel):
+                """Show the interpolated velocity model on the mesh in a new window."""
+                window = Toplevel(self)
+                window.title('Refrainv - Interpolated Velocity Model Mesh')
+                window.configure(bg="#F0F0F0")
+                window.geometry("800x600")
+                window.resizable(True, True)
+                if "nt" in name:
+                    window.iconbitmap("%s/images/ico_refrapy.ico"%getcwd())
+                else:
+                    window.iconbitmap("@"+getcwd()+"/images/ico_refrapy.xbm")
+            
+                frame = Frame(window)
+                frame.grid(row=0, column=0, sticky="NSEW")
+                fig = plt.figure(figsize=(10, 8))
+                fig.patch.set_facecolor('#F0F0F0')
+                canvas = FigureCanvasTkAgg(fig, frame)
+                canvas.draw()
+                toolbar = NavigationToolbar2Tk(canvas, frame)
+                toolbar.update()
+                canvas._tkcanvas.pack(fill="both", expand=True)
+                ax = fig.add_subplot(111)
+                pg.show(mesh, interpolated_vel, ax=ax, cMap=self.colormap, label="Velocity [m/s]", showMesh=True)
+                ax.set_title("Interpolated Velocity Model on Mesh")
+                ax.set_xlabel("Distance [m]")
+                ax.set_ylabel("Depth [m]" if not self.z2elev else "Elevation [m]")
+                if self.showGrid:
+                    ax.grid(lw=0.5, alpha=0.5)
+                ax.set_aspect("equal")
+                fig.tight_layout()
+                fig.canvas.draw()
+                window.tkraise()    
+            def showVelModel():
+                """Display the loaded velocity model in a separate window"""
+                if self.velModel is None:
+                    messagebox.showwarning("Refrainv", "No velocity model loaded!")
+                    #tomoWindow.tkraise()
+                    return
+                
+                try:
+                    # Create a new window to show the velocity model
+                    velModelWindow = Toplevel(self)
+                    velModelWindow.title('Refrainv - Velocity Model Preview')
+                    velModelWindow.configure(bg="#F0F0F0")
+                    velModelWindow.geometry("800x600")
+                    velModelWindow.resizable(True, True)
+                    
+                    # Set icon
+                    if "nt" in name:
+                        velModelWindow.iconbitmap("%s/images/ico_refrapy.ico"%getcwd())
+                    else:
+                        velModelWindow.iconbitmap("@"+getcwd()+"/images/ico_refrapy.xbm")
+                    
+                    # Create matplotlib figure
+                    frame = Frame(velModelWindow)
+                    frame.grid(row=0, column=0, sticky="NSEW")
+                    
+                    fig = plt.figure(figsize=(10, 8))
+                    fig.patch.set_facecolor('#F0F0F0')
+                    canvas = FigureCanvasTkAgg(fig, frame)
+                    canvas.draw()
+                    toolbar = NavigationToolbar2Tk(canvas, frame)
+                    toolbar.update()
+                    canvas._tkcanvas.pack(fill="both", expand=True)
+                    
+                    # Create subplot
+                    ax = fig.add_subplot(111)
+                    
+                    # Create contour plot
+                    X, Z = np.meshgrid(self.velModel['x_coords'], self.velModel['z_coords'])
+                    
+                    # Create filled contour plot
+                    contour = ax.contourf(X, Z, self.velModel['vel_grid'], 
+                                         levels=20, cmap=self.colormap, extend="both")
+                    
+                    # Add colorbar
+                    cbar = fig.colorbar(contour, ax=ax, label="Velocity [m/s]", format='%d')
+                    
+                    ax.set_title(f"Velocity Model: {path.basename(self.velModel['file_path'])}")
+                    ax.set_xlabel("Distance [m]")
+                    ax.set_ylabel("Depth [m]" if not self.z2elev else "Elevation [m]")
+                    
+                    if self.showGrid:
+                        ax.grid(lw=0.5, alpha=0.5)
+                    
+                    ax.set_aspect("equal")
+                    
+                    # Add statistics
+                    vel_min = float(self.velModel['values'].min())
+                    vel_max = float(self.velModel['values'].max())
+                    vel_mean = float(self.velModel['values'].mean())
+                    
+                    stats_text = (f"Grid: {self.velModel['nx']} x {self.velModel['nz']}\n"
+                                 f"Min: {vel_min:.0f} m/s\n"
+                                 f"Max: {vel_max:.0f} m/s\n"
+                                 f"Mean: {vel_mean:.0f} m/s")
+                    
+                    ax.text(0.02, 0.98, stats_text, transform=ax.transAxes, 
+                           verticalalignment='top', 
+                           bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+                    
+                    fig.tight_layout()
+                    fig.canvas.draw()
+                    velModelWindow.tkraise()
+                    
+                except Exception as e:
+                    messagebox.showerror("Refrainv", f"Error displaying velocity model: {str(e)}")
+                    tomoWindow.tkraise()
+            def loadVelModel():
+                """Load a velocity model from a .vel file"""
+                try:
+                    vel_file_path = filedialog.askopenfilename(
+                        title="Select Velocity Model File (.vel)",
+                        initialdir=self.projPath,
+                        filetypes=[("Velocity Files", "*.vel"), ("All Files", "*.*")]
+                    )
+                    
+                    if vel_file_path:
+                        # Parse the .vel file
+                        with open(vel_file_path, 'r') as f:
+                            lines = f.readlines()
+                        
+                        # Parse header information
+                        # Line 0: Format identifier (usually 'V')
+                        # Line 1: Number of x nodes
+                        # Line 2: Number of z nodes  
+                        # Line 3: Usually 1 (parameter count)
+                        # Line 4: x_min
+                        # Line 5: x_max
+                        # Line 6: z_min
+                        # Line 7: z_max
+                        # Line 8: Usually 0 (flag)
+                        # Line 9: Usually 0 (flag)
+                        # Line 10+: Velocity values
+                        
+                        nx = int(lines[1].strip())
+                        nz = int(lines[2].strip())
+                        x_min = float(lines[4].strip())
+                        x_max = float(lines[5].strip())
+                        z_min = float(lines[6].strip())
+                        z_max = float(lines[7].strip())
+                        
+                        # Read velocity data (starting from line 11)
+                        vel_data_str = ' '.join(lines[10:])
+                        vel_values = [float(v) for v in vel_data_str.split()]
+                        
+                        # Verify we have the expected number of values
+                        expected_values = nx * nz
+                        if len(vel_values) != expected_values:
+                            messagebox.showwarning("Refrainv", 
+                                f"Warning: Expected {expected_values} velocity values, got {len(vel_values)}")
+                        
+                        # Create coordinate grids
+                        x_coords = np.linspace(x_min, x_max, nx)
+                        z_coords = np.linspace(z_min, z_max, nz)
+                        
+                        # Reshape velocity data to 2D grid (assuming row-major order: z varies fastest)
+                        vel_grid = np.flipud(np.array(vel_values[:nx*nz]).reshape(nz, nx))*1000
+                        
+                        # Create mesh coordinates for interpolation
+                        X, Z = np.meshgrid(x_coords, z_coords)
+                        
+                        # Flatten for interpolation
+                        points = np.column_stack([X.ravel(), Z.ravel()])
+                        values = vel_grid.ravel()
+                        
+                        # Store the velocity model data
+                        self.velModel = {
+                            'points': points,
+                            'values': values,
+                            'x_coords': x_coords,
+                            'z_coords': z_coords,
+                            'vel_grid': vel_grid,
+                            'nx': nx,
+                            'nz': nz,
+                            'x_min': x_min,
+                            'x_max': x_max,
+                            'z_min': z_min,
+                            'z_max': z_max,
+                            'file_path': vel_file_path
+                        }
+                        
+                        velmodel_label.config(text=f"Loaded: {path.basename(vel_file_path)}")
+                        messagebox.showinfo("Refrainv", 
+                            f"Velocity model loaded successfully!\n"
+                            f"Grid: {nx} x {nz}\n"
+                            f"X range: {x_min:.1f} - {x_max:.1f} m\n"
+                            f"Z range: {z_min:.1f} - {z_max:.1f} m\n"
+                            f"Velocity range: {values.min():.1f} - {values.max():.1f} m/s")
+                            
+                except Exception as e:
+                    messagebox.showerror("Refrainv", f"Error loading velocity model: {str(e)}")
+                    
+                tomoWindow.tkraise()
+            def clearVelModel():
+                """Clear the loaded velocity model"""
+                self.velModel = None
+                velmodel_label.config(text="No velocity model loaded")
+                messagebox.showinfo("Refrainv", "Velocity model cleared!")
+                tomoWindow.tkraise()
             def loadStartModel():
                 """Load a VTK start model from a previous inversion"""
                 try:
@@ -1196,21 +1428,19 @@ E-mail: vjs279@hotmail.com
                     tomoWindow.tkraise()
 
             def runInversion():
-
                 if self.tomoPlot:
-
                     self.clearTomoPlot()
-                #save current window parameters
-        
-                start_timing=datetime.now()    
-                #if self.tomoMesh == False:
-
+                
+                start_timing = datetime.now()    
+                
                 maxDepth = float(maxDepth_entry.get())
                 paraDX = float(paraDX_entry.get())
                 paraMaxCellSize = float(paraMaxCellSize_entry.get())
-                paraQuality =float(paraQuality_entry.get())
-                self.tomoMesh = self.mgr.createMesh(data=self.data_pg,paraDepth=maxDepth,paraDX=paraDX,paraMaxCellSize=paraMaxCellSize,quality=paraQuality)
-
+                paraQuality = float(paraQuality_entry.get())
+                self.tomoMesh = self.mgr.createMesh(data=self.data_pg, paraDepth=maxDepth, 
+                                                   paraDX=paraDX, paraMaxCellSize=paraMaxCellSize, 
+                                                   quality=paraQuality)
+            
                 lam = float(lam_entry.get())
                 zWeigh = float(zWeigh_entry.get())
                 vTop = float(vTop_entry.get())
@@ -1222,9 +1452,9 @@ E-mail: vjs279@hotmail.com
                 secNodes = int(secNodes_entry.get())
                 maxIter = int(maxIter_entry.get())
                 
-                xngrid=xngrid_entry.get()
-                yngrid=yngrid_entry.get()
-                nlevels=nlevels_entry.get()
+                xngrid = xngrid_entry.get()
+                yngrid = yngrid_entry.get()
+                nlevels = nlevels_entry.get()
                 
                 # Prepare inversion parameters
                 invert_kwargs = {
@@ -1241,58 +1471,76 @@ E-mail: vjs279@hotmail.com
                     'secNodes': secNodes
                 }
                 
-                # Add start model if available
+                # Check for start models (VTK or .vel file)
+                start_model_used = None
+                
+                # Priority 1: VTK start model (existing functionality)
                 if self.startModel is not None:
                     try:
-                        # Interpolate start model to current mesh if needed
                         if len(self.startModel) != self.tomoMesh.cellCount():
                             messagebox.showwarning("Refrainv", 
-                                "Start model mesh size differs from current mesh. Interpolating...")
-                            # Simple interpolation - in practice you might want more sophisticated interpolation
+                                "VTK start model mesh size differs from current mesh. Interpolating...")
                             start_model_interp = pg.interpolate(self.startModel, 
                                                                srcMesh=pg.load(self.startModelPath), 
                                                                destMesh=self.tomoMesh)
                             invert_kwargs['startModel'] = start_model_interp
                         else:
                             invert_kwargs['startModel'] = self.startModel
-                            
-                        messagebox.showinfo("Refrainv", "Using loaded start model for inversion.")
+                        start_model_used = f"VTK: {path.basename(self.startModelPath)}"
                     except Exception as e:
                         messagebox.showwarning("Refrainv", 
-                            f"Could not use start model: {str(e)}. Proceeding without start model.")
+                            f"Could not use VTK start model: {str(e)}. Checking for velocity model...")
+                
+                # Priority 2: .vel file start model (new functionality)
+                if 'startModel' not in invert_kwargs and hasattr(self, 'velModel') and self.velModel is not None:
+                    try:
+                        interpolated_vel = self.interpolateVelModelToMesh(self.tomoMesh)
+                        invert_kwargs['startModel'] = interpolated_vel
+                        start_model_used = f"VEL: {path.basename(self.velModel['file_path'])}"
+                        messagebox.showinfo("Refrainv", "Using .vel file as start model for inversion.")
+                        showInterpolatedVelMesh(mesh=self.tomoMesh, interpolated_vel=interpolated_vel)
+                        
+                    except Exception as e:
+                        messagebox.showwarning("Refrainv", 
+                            f"Could not use .vel start model: {str(e)}. Proceeding without start model.")
+                
+                if start_model_used:
+                    messagebox.showinfo("Refrainv", f"Using start model: {start_model_used}")
                 
                 vest = self.mgr.invert(**invert_kwargs)
-                             
-                #keep entered options
-                 
-                self.tomostandards["depth"]=maxDepth
-                self.tomostandards["dx"]=paraDX
-                self.tomostandards["cellseize"]=paraMaxCellSize
-                self.tomostandards["quality"]=paraQuality
-                self.tomostandards["lamda"]=lam
-                self.tomostandards["zweight"]=zWeigh
-                self.tomostandards["vtop"]=vTop
-                self.tomostandards["vbottom"]=vBottom
-                self.tomostandards["minvel"]=minVelLimit
-                self.tomostandards["maxvel"]=maxVelLimit
-                self.tomostandards["secnodes"]=secNodes
-                self.tomostandards["maxiter"]=maxIter
-                self.tomostandards["gridx"]=xngrid
-                self.tomostandards["gridy"]=yngrid
-                self.tomostandards["nlevels"]=nlevels
+                         
+                # Keep entered options and add start model info
+                self.tomostandards["depth"] = maxDepth
+                self.tomostandards["dx"] = paraDX
+                self.tomostandards["cellseize"] = paraMaxCellSize
+                self.tomostandards["quality"] = paraQuality
+                self.tomostandards["lamda"] = lam
+                self.tomostandards["zweight"] = zWeigh
+                self.tomostandards["vtop"] = vTop
+                self.tomostandards["vbottom"] = vBottom
+                self.tomostandards["minvel"] = minVelLimit
+                self.tomostandards["maxvel"] = maxVelLimit
+                self.tomostandards["secnodes"] = secNodes
+                self.tomostandards["maxiter"] = maxIter
+                self.tomostandards["gridx"] = xngrid
+                self.tomostandards["gridy"] = yngrid
+                self.tomostandards["nlevels"] = nlevels
                 
-                self.parameters_tomo = [maxDepth,paraDX,paraMaxCellSize,lam,zWeigh,vTop,vBottom,minVelLimit,maxVelLimit,secNodes,maxIter,
-                                        int(xngrid_entry.get()),int(yngrid_entry.get()),int(nlevels_entry.get()),
-                                        self.mgr.inv.maxIter,self.mgr.inv.relrms(),self.mgr.inv.chi2(),self.mgr.inv.inv.iter()]
-                end_timing=datetime.now()
-                self.tomotiming=end_timing-start_timing
-                #regular pigimli save
+                self.parameters_tomo = [maxDepth, paraDX, paraMaxCellSize, lam, zWeigh, vTop, vBottom, 
+                                       minVelLimit, maxVelLimit, secNodes, maxIter,
+                                       int(xngrid_entry.get()), int(yngrid_entry.get()), int(nlevels_entry.get()),
+                                       self.mgr.inv.maxIter, self.mgr.inv.relrms(), self.mgr.inv.chi2(), 
+                                       self.mgr.inv.inv.iter()]
+                
+                end_timing = datetime.now()
+                self.tomotiming = end_timing - start_timing
+                
+                # Regular pygimli save
                 self.mgr.saveResult(self.projPath)
-                                
                 
                 plotContourModel()
-                if self.showRayPath: self.RayPaths=self.mgr.drawRayPaths(self.ax_tomography,color=self.rayPathColor)                
-
+                if self.showRayPath: 
+                    self.RayPaths = self.mgr.drawRayPaths(self.ax_tomography, color=self.rayPathColor)    
             def plotContourModel():
    
                 xzvcs = column_stack((self.mgr.paraDomain.cellCenters(),
@@ -1340,6 +1588,7 @@ E-mail: vjs279@hotmail.com
                 zlim = self.sgz+[self.tomoMesh.yMin(),self.tomoMesh.yMin()]
 
                 self.topographyx, self.topographyz = [], []
+                
 
                 for i in range(len(self.sgx)):
 
@@ -1517,6 +1766,17 @@ E-mail: vjs279@hotmail.com
             Button(scrollable_frame, text="Clear Start Model", command=clearStartModel).grid(row=17,column=1,pady=5,sticky="W")
             Button(scrollable_frame, text="Show Start Model", command=showStartModel).grid(row=18,column=0,columnspan=2,pady=5,sticky="EW")
             
+            # Velocity Model (.vel file) section
+            Label(scrollable_frame, text="Velocity Model (.vel file)", font=("Arial", 11)).grid(row=25,column=0,columnspan=2,pady=10,sticky="E")
+            
+            velmodel_label = Label(scrollable_frame, text="No velocity model loaded", fg="gray")
+            velmodel_label.grid(row=26,column=0,columnspan=2,pady=5,sticky="EW")
+            
+            Button(scrollable_frame, text="Load .vel Model", command=loadVelModel).grid(row=27,column=0,pady=5,sticky="E")
+            Button(scrollable_frame, text="Clear .vel Model", command=clearVelModel).grid(row=27,column=1,pady=5,sticky="W")
+            Button(scrollable_frame, text="Show .vel Model", command=showVelModel).grid(row=28,column=0,columnspan=2,pady=5,sticky="EW")
+
+            
             Label(scrollable_frame, text="Contour plot options", font=("Arial", 11)).grid(row=19,column=0,columnspan=2,pady=10,sticky="E")
             
             Label(scrollable_frame, text = "# of nodes for gridding (x)").grid(row=20,column=0,pady=5,sticky="E")
@@ -1536,7 +1796,7 @@ E-mail: vjs279@hotmail.com
             
             button = Button(scrollable_frame, text="Run inversion", command=runInversion).grid(row=23,column=0,columnspan=2,pady=5,sticky="E")
 
-            tomoWindow.tkraise()
+#            tomoWindow.tkraise()
 
     def saveResults(self):
 
@@ -1589,13 +1849,13 @@ E-mail: vjs279@hotmail.com
                         hull_points = all_points[hull.vertices]
                         #first point is the upperrightmost one
                         #create the points of the "outside" poly:
-                        upper_rightest=(hull_points[0][0]+2*buffer,hull_points[0][1]+2*buffer)
-                        upper_2ndrightest=(hull_points[0][0]+buffer,hull_points[0][1]+buffer)
-                        upper_lefttest=(hull_points[1][0]-2*buffer,hull_points[0][1]+2*buffer)
-                        upper_2ndlefttest=(hull_points[1][0]-buffer,hull_points[0][1]+2*buffer)
+                        #upper_rightest=(hull_points[0][0]+2*buffer,hull_points[0][1]+2*buffer)
+                        #upper_2ndrightest=(hull_points[0][0]+buffer,hull_points[0][1]+buffer)
+                        #upper_lefttest=(hull_points[1][0]-2*buffer,hull_points[0][1]+2*buffer)
+                        #upper_2ndlefttest=(hull_points[1][0]-buffer,hull_points[0][1]+2*buffer)
                         
-                        lower_left=(hull_points[1][0]-2*buffer,self.tomoModel_z.min-buffer)
-                        lower_right=(hull_points[0][0]+2*buffer,self.tomoModel_z.min-buffer)
+                        #lower_left=(hull_points[1][0]-2*buffer,self.tomoModel_z.min-buffer)
+                        #lower_right=(hull_points[0][0]+2*buffer,self.tomoModel_z.min-buffer)
                         # Export hull as BLN file (Surfer compatible format)
                         with open(self.projPath+"/models/"+nowstring+"/%s_raypaths_hull.bln"%(self.lineName), 'w') as f:
                             # For Surfer BLN format: number of points (including closing point), flag (1 for closed polygon)
