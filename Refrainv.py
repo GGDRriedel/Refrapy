@@ -1495,7 +1495,7 @@ class Refrainv(Tk):
                 if 'startModel' not in invert_kwargs and hasattr(self, 'velModel') and self.velModel is not None:
                     try:
                         interpolated_vel = self.interpolateVelModelToMesh(self.tomoMesh)
-                        invert_kwargs['startModel'] = interpolated_vel
+                        invert_kwargs['startModel'] = 1./interpolated_vel # 1/ because of slowness
                         start_model_used = f"VEL: {path.basename(self.velModel['file_path'])}"
                         messagebox.showinfo("Refrainv", "Using .vel file as start model for inversion.")
                         showInterpolatedVelMesh(mesh=self.tomoMesh, interpolated_vel=interpolated_vel)
