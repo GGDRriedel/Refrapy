@@ -72,7 +72,8 @@ class Refrapick(Tk):
         self.ico_restoreTraces = PhotoImage(file="%s/images/ico_restoreTraces.gif"%getcwd())
         self.ico_help = PhotoImage(file="%s/images/ico_help.gif"%getcwd())
         self.ico_plotOptions = PhotoImage(file="%s/images/ico_plotOptions.gif"%getcwd())
-        
+        self.ico_normalize = PhotoImage(file="%s/images/tn.png"%getcwd())
+
         bt = Button(frame_toolbar,image = self.ico_newProject,command = self.createProject,width=25)
         bt.grid(row = 0, column = 1, sticky="W")
         bl = Balloon(self)
@@ -232,6 +233,11 @@ class Refrapick(Tk):
         bt.grid(row = 0, column = 32, sticky="W")
         bl = Balloon(self)
         bl.bind(bt,"Help")
+
+        bt = Button(frame_toolbar,image=self.ico_normalize,command = self.normalize_trace,width=25)
+        bt.grid(row = 1, column = 1, sticky="W")
+        bl = Balloon(self)
+        bl.bind(bt,"Normalize trace amplitudes")
 
         self.protocol("WM_DELETE_WINDOW", self.kill)
         self.initiateVariables()
@@ -1130,7 +1136,16 @@ E-mail: vjs279@hotmail.com
             elif self.fillSide[self.currentSt] == -1: self.fillNegative()
                 
             self.figs[self.currentSt].canvas.draw()
-            
+    def normalize_trace(self):
+        """Normalize all traces in the current section to maximum amplitude."""
+        if self.sts:
+            for i, tr in enumerate(self.tracesArts[self.currentSt]):
+                amp = self.tracesData[self.currentSt][i]
+                norm_amp = amp / max(abs(amp))
+                self.tracesData[self.currentSt][i] = norm_amp
+                tr.set_xdata(norm_amp * self.gains[self.currentSt] + self.x1s[self.currentSt] + self.dxs[self.currentSt] * i)
+            self.figs[self.currentSt].canvas.draw()
+            messagebox.showinfo("Refrapick", "All traces normalized in current section.")        
     def wigglesOnly(self):
 
         if self.fillSide[self.currentSt] == 1 or self.fillSide[self.currentSt] == -1:

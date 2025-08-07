@@ -14,6 +14,14 @@
 
 ## Introduction
 
+This repo is a fork. It provides mainly functionality enhancements and quality of life improvements we need and use for refraction tomography inversion.
+
+The fork is created  by [text](http://www.geophysik-ggd.com/)
+
+The fork is meant for internal use, we do want to share these improvements with the community. 
+
+--------------
+
 Refrapy is a Python software package with a graphical interface for seismic refraction data analysis.
 
 It is based on two modules: Refrapick and Refrainv.
@@ -26,6 +34,8 @@ All main dependencies are listed below:
    scipy=1.8.0
    matplotlib=3.5.1
    ```
+
+### Nowadays it is recommended to either use the latest conda or use mamba env manager directly!
 
 It is recommended the use of Anaconda (https://www.anaconda.com/), because it simplifies package management.
 Once it is installed, run the following commands on the Anaconda prompt (**tested on Windows 10 system, with Python 3.8.13**):
@@ -60,6 +70,7 @@ You can execute the Python files by running:
    python Refrapick.py
    python Refrainv.py
    ```
+
 
 ## Refrapick
 

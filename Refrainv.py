@@ -310,6 +310,9 @@ class Refrainv(Tk):
             total_runs = len(lam_values) * len(cell_values) * len(zw_values)
             progress = tqdm(total=total_runs, desc="Batch inversion")
 
+            # Collect results for export
+            results = []
+
             for lam in lam_values:
                 for cell in cell_values:
                     for zw in zw_values:
@@ -318,7 +321,13 @@ class Refrainv(Tk):
                         paraDX = float(self.tomostandards["dx"])
                         paraMaxCellSize = cell
                         paraQuality = float(self.tomostandards["quality"])
-                        self.tomoMesh = self.mgr.createMesh(data=self.data_pg, paraDepth=maxDepth, paraDX=paraDX, paraMaxCellSize=paraMaxCellSize, quality=paraQuality)
+                        self.tomoMesh = self.mgr.createMesh(
+                            data=self.data_pg,
+                            paraDepth=maxDepth,
+                            paraDX=paraDX,
+                            paraMaxCellSize=paraMaxCellSize,
+                            quality=paraQuality
+                        )
                         invert_kwargs = {
                             'data': self.data_pg,
                             'mesh': self.tomoMesh,
@@ -335,17 +344,38 @@ class Refrainv(Tk):
                         # Optionally add start model logic here
 
                         vest = self.mgr.invert(**invert_kwargs)
+                        chi2hist = self.mgr.inv.chi2History
+                        chi2 = self.mgr.inv.chi2()
+                        relrms = self.mgr.inv.relrms()
+                        absrms = self.mgr.inv.absrms()
+                        niter = self.mgr.inv.inv.iter()
                         # Save results with parameter info
                         param_str = f"lam{lam}_cell{cell}_zw{zw}"
                         outdir = os.path.join(self.projPath, "models", param_str)
-                        # Regular pygimli save
                         self.mgr.saveResult(outdir)
                         os.makedirs(outdir, exist_ok=True)
                         np.savetxt(os.path.join(outdir, f"{self.lineName}_vel.txt"), vest)
-                        # Optionally save figures, statistics, etc.
+                        # Save chi2 history as text
+                        np.savetxt(os.path.join(outdir, f"{self.lineName}_chi2hist.txt"), chi2hist)
+                        # Collect for summary table
+
+                        results.append({
+                            "lam": lam,
+                            "cell": cell,
+                            "zweight": zw,
+                            "chi2": chi2,
+                            "relrms": relrms,
+                            "absrms": absrms,
+                            "niter": niter,
+                            "chi2hist": ";".join([str(x) for x in chi2hist])
+                        })
                         progress.update(1)
             progress.close()
-            messagebox.showinfo("Refrainv", "Batch inversion finished!")
+            # Export summary table as CSV
+            df = pd.DataFrame(results)
+            summary_path = os.path.join(self.projPath, "models", "batch_summary.csv")
+            df.to_csv(summary_path, index=False)
+            messagebox.showinfo("Refrainv", f"Batch inversion finished!\nSummary table saved to:\n{summary_path}")
             batchWindow.destroy()
 
     def help(self):
