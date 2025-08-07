@@ -176,29 +176,76 @@ class Refrainv(Tk):
         self.initiateVariables()
 
     def batchTomography(self):
-        """Run tomography inversion for a range of parameters."""
+        """Run tomography inversion for a range of parameters with a dynamic batch count display."""
         # Dialog to get parameter ranges
         batchWindow = Toplevel(self)
         batchWindow.title('Refrainv - Batch Tomography')
-        batchWindow.geometry("400x400")
+        batchWindow.geometry("420x420")
         batchWindow.configure(bg="#F0F0F0")
 
-        Label(batchWindow, text="Smoothing (lam) range (min,max,step):").pack()
-        lam_entry = Entry(batchWindow)
-        lam_entry.pack()
+        # Helper to parse and count steps
+        def count_batches(*entries):
+            try:
+                lam_min, lam_max, lam_step = map(float, lam_entry.get().split(","))
+                cell_min, cell_max, cell_step = map(float, cell_entry.get().split(","))
+                zw_min, zw_max, zw_step = map(float, zweight_entry.get().split(","))
+                lam_values = np.arange(lam_min, lam_max + lam_step, lam_step)
+                cell_values = np.arange(cell_min, cell_max + cell_step, cell_step)
+                zw_values = np.arange(zw_min, zw_max + zw_step, zw_step)
+                total = len(lam_values) * len(cell_values) * len(zw_values)
+                batch_count_label.config(text=f"Total batch runs: {total}")
+            except Exception:
+                batch_count_label.config(text="Total batch runs: -")
+
+        # Title
+        Label(batchWindow, text="Batch Tomography Inversion", font=("Arial", 13, "bold"), bg="#F0F0F0").pack(pady=(10, 5))
+
+        # Smoothing (lam)
+        frame_lam = Frame(batchWindow, bg="#F0F0F0")
+        frame_lam.pack(pady=5, fill="x", padx=20)
+        Label(frame_lam, text="Smoothing (lam) range (min,max,step):", bg="#F0F0F0").pack(side="left")
+        lam_entry = Entry(frame_lam, width=15)
+        lam_entry.pack(side="right")
         lam_entry.insert(0, "10,200,10")
 
-        Label(batchWindow, text="Cell size range (min,max,step):").pack()
-        cell_entry = Entry(batchWindow)
-        cell_entry.pack()
+        # Cell size
+        frame_cell = Frame(batchWindow, bg="#F0F0F0")
+        frame_cell.pack(pady=5, fill="x", padx=20)
+        Label(frame_cell, text="Cell size range (min,max,step):", bg="#F0F0F0").pack(side="left")
+        cell_entry = Entry(frame_cell, width=15)
+        cell_entry.pack(side="right")
         cell_entry.insert(0, "2,10,2")
 
-        Label(batchWindow, text="Vertical/horizontal smoothing (zweight) range (min,max,step):").pack()
-        zweight_entry = Entry(batchWindow)
-        zweight_entry.pack()
+        # Zweight
+        frame_zw = Frame(batchWindow, bg="#F0F0F0")
+        frame_zw.pack(pady=5, fill="x", padx=20)
+        Label(frame_zw, text="Vertical/horizontal smoothing (zweight) range (min,max,step):", bg="#F0F0F0").pack(side="left")
+        zweight_entry = Entry(frame_zw, width=15)
+        zweight_entry.pack(side="right")
         zweight_entry.insert(0, "0.1,0.5,0.1")
-        abel(batchWindow, text="This will run a batched inversion with the program STANDARD parameters. \n If you have not provieded these with a .json, internal standards will be used. ").pack()
-        Button(batchWindow, text="Run batch", command=lambda: runBatch()).pack(pady=10)
+
+        # Dynamic batch count label
+        batch_count_label = Label(batchWindow, text="Total batch runs: -", font=("Arial", 11, "bold"), fg="#0055aa", bg="#F0F0F0")
+        batch_count_label.pack(pady=(10, 5))
+
+        # Info
+        Label(
+            batchWindow,
+            text="This will run a batched inversion with the program STANDARD parameters.\n"
+             "If you have not provided these with a .json, internal standards will be used.",
+            bg="#F0F0F0", wraplength=380, justify="center"
+        ).pack(pady=(5, 10))
+
+        # Bind events for dynamic update
+        for entry in (lam_entry, cell_entry, zweight_entry):
+            entry.bind("<KeyRelease>", lambda e: count_batches())
+            entry.bind("<FocusOut>", lambda e: count_batches())
+
+        # Initial count
+        count_batches()
+
+        # Run button
+        Button(batchWindow, text="Run batch", font=("Arial", 11, "bold"), bg="#228B22", fg="white", command=lambda: runBatch()).pack(pady=15)
 
         def runBatch():
             try:
@@ -1767,115 +1814,135 @@ class Refrainv(Tk):
                     "nlevels": "20"
                                         }
             
-            Label(scrollable_frame, text="Mesh options", font=("Arial", 11)).grid(row=0,column=0,columnspan=2,pady=10,sticky="E")
-            
-            Label(scrollable_frame, text = "Maximum depth (max offset = %.2f m)"%max(offsets)).grid(row=1,column=0,pady=5,sticky="E")
-            maxDepth_entry = Entry(scrollable_frame,width=6)
-            maxDepth_entry.grid(row=1,column=1,pady=5)
-            maxDepth_entry.insert(0, self.tomostandards["depth"])#str(max(offsets)*0.4))#str(int((self.gx[-1]-self.gx[0])*0.4)))
+            # --- Mesh Options Section ---
+            mesh_section = Label(scrollable_frame, text="Mesh Options", font=("Arial", 12, "bold"), bg="#F0F0F0")
+            mesh_section.grid(row=0, column=0, columnspan=2, pady=(15, 5), sticky="EW")
 
-            Label(scrollable_frame, text = "Node every # times receiver distance:").grid(row=2,column=0,pady=5,sticky="E")
-            paraDX_entry = Entry(scrollable_frame,width=6)
-            paraDX_entry.grid(row=2,column=1,pady=5)
-            paraDX_entry.insert(0,self.tomostandards["dx"])
+            Label(scrollable_frame, text="Maximum depth (max offset = %.2f m)" % max(offsets), bg="#F0F0F0").grid(row=1, column=0, pady=3, sticky="E")
+            maxDepth_entry = Entry(scrollable_frame, width=10)
+            maxDepth_entry.grid(row=1, column=1, pady=3, sticky="W")
+            maxDepth_entry.insert(0, self.tomostandards["depth"])
+            maxDepth_entry.config(highlightbackground="#228B22", highlightcolor="#228B22", highlightthickness=1)
 
-            Label(scrollable_frame, text = "Maximum cell size").grid(row=3,column=0,pady=5,sticky="E")
-            paraMaxCellSize_entry = Entry(scrollable_frame,width=6)
-            paraMaxCellSize_entry.grid(row=3,column=1,pady=5)
-            paraMaxCellSize_entry.insert(0,self.tomostandards["cellseize"])
-            
-            Label(scrollable_frame, text = "Quality Parameter").grid(row=4,column=0,pady=5,sticky="E")
-            paraQuality_entry = Entry(scrollable_frame,width=6)
-            paraQuality_entry.grid(row=4,column=1,pady=5)
-            paraQuality_entry.insert(0,self.tomostandards["quality"])            
-            
-            
-            
-            button = Button(scrollable_frame, text="View mesh", command=viewMesh).grid(row=5,column=0,columnspan=2,pady=5,sticky="E")
+            Label(scrollable_frame, text="Node every # times receiver distance:", bg="#F0F0F0").grid(row=2, column=0, pady=3, sticky="E")
+            paraDX_entry = Entry(scrollable_frame, width=10)
+            paraDX_entry.grid(row=2, column=1, pady=3, sticky="W")
+            paraDX_entry.insert(0, self.tomostandards["dx"])
 
-            Label(scrollable_frame, text="Inversion options", font=("Arial", 11)).grid(row=6,column=0,columnspan=2,pady=10,sticky="E")
-            
-            Label(scrollable_frame, text = "Smoothing (lam)").grid(row=7,column=0,pady=5,sticky="E")
-            lam_entry = Entry(scrollable_frame,width=6)
-            lam_entry.grid(row=7,column=1,pady=5)
-            lam_entry.insert(0,self.tomostandards["lamda"])
+            Label(scrollable_frame, text="Maximum cell size", bg="#F0F0F0").grid(row=3, column=0, pady=3, sticky="E")
+            paraMaxCellSize_entry = Entry(scrollable_frame, width=10)
+            paraMaxCellSize_entry.grid(row=3, column=1, pady=3, sticky="W")
+            paraMaxCellSize_entry.insert(0, self.tomostandards["cellseize"])
 
-            Label(scrollable_frame, text = "Vertical to horizontal smoothing (zweigh)").grid(row=8,column=0,pady=5,sticky="E")
-            zWeigh_entry = Entry(scrollable_frame,width=6)
-            zWeigh_entry.grid(row=8,column=1,pady=5)
-            zWeigh_entry.insert(0,self.tomostandards["zweight"])
+            Label(scrollable_frame, text="Quality parameter (higher = finer mesh)", bg="#F0F0F0").grid(row=4, column=0, pady=3, sticky="E")
+            paraQuality_entry = Entry(scrollable_frame, width=10)
+            paraQuality_entry.grid(row=4, column=1, pady=3, sticky="W")
+            paraQuality_entry.insert(0, self.tomostandards["quality"])
 
-            Label(scrollable_frame, text = "Velocity at the top of the model").grid(row=9,column=0,pady=5,sticky="E")
-            vTop_entry = Entry(scrollable_frame,width=6)
-            vTop_entry.grid(row=9,column=1,pady=5)
-            vTop_entry.insert(0,self.tomostandards["vtop"])
-            
-            Label(scrollable_frame, text = "Velocity at the bottom of the model").grid(row=10,column=0,pady=5,sticky="E")
-            vBottom_entry = Entry(scrollable_frame,width=6)
-            vBottom_entry.grid(row=10,column=1,pady=5)
-            vBottom_entry.insert(0,self.tomostandards["vbottom"])
+            Button(scrollable_frame, text="View mesh", command=viewMesh, bg="#e0e0e0").grid(row=5, column=0, columnspan=2, pady=(5, 10), sticky="EW")
 
-            Label(scrollable_frame, text = "Minimum velocity limit").grid(row=11,column=0,pady=5,sticky="E")
-            minVelLimit_entry = Entry(scrollable_frame,width=6)
-            minVelLimit_entry.grid(row=11,column=1,pady=5)
-            minVelLimit_entry.insert(0,self.tomostandards["minvel"])
+            # --- Inversion Options Section ---
+            inv_section = Label(scrollable_frame, text="Inversion Options", font=("Arial", 12, "bold"), bg="#F0F0F0")
+            inv_section.grid(row=6, column=0, columnspan=2, pady=(10, 5), sticky="EW")
 
-            Label(scrollable_frame, text = "Maximum velocity limit").grid(row=12,column=0,pady=5,sticky="E")
-            maxVelLimit_entry = Entry(scrollable_frame,width=6)
-            maxVelLimit_entry.grid(row=12,column=1,pady=5)
-            maxVelLimit_entry.insert(0,self.tomostandards["maxvel"])
+            Label(scrollable_frame, text="Smoothing (lam)", bg="#F0F0F0").grid(row=7, column=0, pady=3, sticky="E")
+            lam_entry = Entry(scrollable_frame, width=10)
+            lam_entry.grid(row=7, column=1, pady=3, sticky="W")
+            lam_entry.insert(0, self.tomostandards["lamda"])
+            lam_entry.bind("<Enter>", lambda e: lam_entry.config(bg="#e6f7ff"))
+            lam_entry.bind("<Leave>", lambda e: lam_entry.config(bg="white"))
 
-            Label(scrollable_frame, text = "# of secondary nodes").grid(row=13,column=0,pady=5,sticky="E")
-            secNodes_entry = Entry(scrollable_frame,width=6)
-            secNodes_entry.grid(row=13,column=1,pady=5)
-            secNodes_entry.insert(0,self.tomostandards["secnodes"])
+            Label(scrollable_frame, text="Vertical/horizontal smoothing (zweight)", bg="#F0F0F0").grid(row=8, column=0, pady=3, sticky="E")
+            zWeigh_entry = Entry(scrollable_frame, width=10)
+            zWeigh_entry.grid(row=8, column=1, pady=3, sticky="W")
+            zWeigh_entry.insert(0, self.tomostandards["zweight"])
 
-            Label(scrollable_frame, text = "Maximum # of iterations").grid(row=14,column=0,pady=5,sticky="E")
-            maxIter_entry = Entry(scrollable_frame,width=6)
-            maxIter_entry.grid(row=14,column=1,pady=5)
-            maxIter_entry.insert(0,self.tomostandards["maxiter"])
+            Label(scrollable_frame, text="Velocity at the top of the model", bg="#F0F0F0").grid(row=9, column=0, pady=3, sticky="E")
+            vTop_entry = Entry(scrollable_frame, width=10)
+            vTop_entry.grid(row=9, column=1, pady=3, sticky="W")
+            vTop_entry.insert(0, self.tomostandards["vtop"])
 
-            # Start model section
-            Label(scrollable_frame, text="Start Model", font=("Arial", 11)).grid(row=15,column=0,columnspan=2,pady=10,sticky="E")
-            
-            startmodel_label = Label(scrollable_frame, text="No start model loaded", fg="gray")
-            startmodel_label.grid(row=16,column=0,columnspan=2,pady=5,sticky="EW")
-            
-            Button(scrollable_frame, text="Load VTK Start Model", command=loadStartModel).grid(row=17,column=0,pady=5,sticky="E")
-            Button(scrollable_frame, text="Clear Start Model", command=clearStartModel).grid(row=17,column=1,pady=5,sticky="W")
-            Button(scrollable_frame, text="Show Start Model", command=showStartModel).grid(row=18,column=0,columnspan=2,pady=5,sticky="EW")
-            
-            # Velocity Model (.vel file) section
-            Label(scrollable_frame, text="Velocity Model (.vel file)", font=("Arial", 11)).grid(row=25,column=0,columnspan=2,pady=10,sticky="E")
-            
-            velmodel_label = Label(scrollable_frame, text="No velocity model loaded", fg="gray")
-            velmodel_label.grid(row=26,column=0,columnspan=2,pady=5,sticky="EW")
-            
-            Button(scrollable_frame, text="Load .vel Model", command=loadVelModel).grid(row=27,column=0,pady=5,sticky="E")
-            Button(scrollable_frame, text="Clear .vel Model", command=clearVelModel).grid(row=27,column=1,pady=5,sticky="W")
-            Button(scrollable_frame, text="Show .vel Model", command=showVelModel).grid(row=28,column=0,columnspan=2,pady=5,sticky="EW")
+            Label(scrollable_frame, text="Velocity at the bottom of the model", bg="#F0F0F0").grid(row=10, column=0, pady=3, sticky="E")
+            vBottom_entry = Entry(scrollable_frame, width=10)
+            vBottom_entry.grid(row=10, column=1, pady=3, sticky="W")
+            vBottom_entry.insert(0, self.tomostandards["vbottom"])
 
-            
-            Label(scrollable_frame, text="Contour plot options", font=("Arial", 11)).grid(row=19,column=0,columnspan=2,pady=10,sticky="E")
-            
-            Label(scrollable_frame, text = "# of nodes for gridding (x)").grid(row=20,column=0,pady=5,sticky="E")
-            xngrid_entry = Entry(scrollable_frame,width=6)
-            xngrid_entry.grid(row=20,column=1,pady=5)
-            xngrid_entry.insert(0,self.tomostandards["gridx"])
+            Label(scrollable_frame, text="Minimum velocity limit", bg="#F0F0F0").grid(row=11, column=0, pady=3, sticky="E")
+            minVelLimit_entry = Entry(scrollable_frame, width=10)
+            minVelLimit_entry.grid(row=11, column=1, pady=3, sticky="W")
+            minVelLimit_entry.insert(0, self.tomostandards["minvel"])
 
-            Label(scrollable_frame, text = "# of nodes for gridding (y)").grid(row=21,column=0,pady=5,sticky="E")
-            yngrid_entry = Entry(scrollable_frame,width=6)
-            yngrid_entry.grid(row=21,column=1,pady=5)
-            yngrid_entry.insert(0,self.tomostandards["gridy"])
+            Label(scrollable_frame, text="Maximum velocity limit", bg="#F0F0F0").grid(row=12, column=0, pady=3, sticky="E")
+            maxVelLimit_entry = Entry(scrollable_frame, width=10)
+            maxVelLimit_entry.grid(row=12, column=1, pady=3, sticky="W")
+            maxVelLimit_entry.insert(0, self.tomostandards["maxvel"])
 
-            Label(scrollable_frame, text = "# of contour levels").grid(row=22,column=0,pady=5,sticky="E")
-            nlevels_entry = Entry(scrollable_frame,width=6)
-            nlevels_entry.grid(row=22,column=1,pady=5)
-            nlevels_entry.insert(0,self.tomostandards["nlevels"])
-            
-            button = Button(scrollable_frame, text="Run inversion", command=runInversion).grid(row=23,column=0,columnspan=2,pady=5,sticky="E")
-            Button(scrollable_frame, text="Batch inversion", command=self.batchTomography).grid(row=24,column=0,columnspan=2,pady=5,sticky="E")
-#            tomoWindow.tkraise()
+            Label(scrollable_frame, text="# of secondary nodes", bg="#F0F0F0").grid(row=13, column=0, pady=3, sticky="E")
+            secNodes_entry = Entry(scrollable_frame, width=10)
+            secNodes_entry.grid(row=13, column=1, pady=3, sticky="W")
+            secNodes_entry.insert(0, self.tomostandards["secnodes"])
+
+            Label(scrollable_frame, text="Maximum # of iterations", bg="#F0F0F0").grid(row=14, column=0, pady=3, sticky="E")
+            maxIter_entry = Entry(scrollable_frame, width=10)
+            maxIter_entry.grid(row=14, column=1, pady=3, sticky="W")
+            maxIter_entry.insert(0, self.tomostandards["maxiter"])
+
+            # --- Start Model Section ---
+            start_section = Label(scrollable_frame, text="Start Model", font=("Arial", 12, "bold"), bg="#F0F0F0")
+            start_section.grid(row=15, column=0, columnspan=2, pady=(15, 5), sticky="EW")
+
+            startmodel_label = Label(scrollable_frame, text="No start model loaded", fg="gray", bg="#F0F0F0")
+            startmodel_label.grid(row=16, column=0, columnspan=2, pady=2, sticky="EW")
+
+            Button(scrollable_frame, text="Load VTK Start Model", command=loadStartModel, bg="#e0e0e0").grid(row=17, column=0, pady=2, sticky="EW")
+            Button(scrollable_frame, text="Clear Start Model", command=clearStartModel, bg="#e0e0e0").grid(row=17, column=1, pady=2, sticky="EW")
+            Button(scrollable_frame, text="Show Start Model", command=showStartModel, bg="#e0e0e0").grid(row=18, column=0, columnspan=2, pady=2, sticky="EW")
+
+            # --- Velocity Model (.vel) Section ---
+            vel_section = Label(scrollable_frame, text="Velocity Model (.vel file)", font=("Arial", 12, "bold"), bg="#F0F0F0")
+            vel_section.grid(row=19, column=0, columnspan=2, pady=(15, 5), sticky="EW")
+
+            velmodel_label = Label(scrollable_frame, text="No velocity model loaded", fg="gray", bg="#F0F0F0")
+            velmodel_label.grid(row=20, column=0, columnspan=2, pady=2, sticky="EW")
+
+            Button(scrollable_frame, text="Load .vel Model", command=loadVelModel, bg="#e0e0e0").grid(row=21, column=0, pady=2, sticky="EW")
+            Button(scrollable_frame, text="Clear .vel Model", command=clearVelModel, bg="#e0e0e0").grid(row=21, column=1, pady=2, sticky="EW")
+            Button(scrollable_frame, text="Show .vel Model", command=showVelModel, bg="#e0e0e0").grid(row=22, column=0, columnspan=2, pady=2, sticky="EW")
+
+            # --- Contour Plot Options Section ---
+            contour_section = Label(scrollable_frame, text="Contour Plot Options", font=("Arial", 12, "bold"), bg="#F0F0F0")
+            contour_section.grid(row=23, column=0, columnspan=2, pady=(15, 5), sticky="EW")
+
+            Label(scrollable_frame, text="# of nodes for gridding (x)", bg="#F0F0F0").grid(row=24, column=0, pady=3, sticky="E")
+            xngrid_entry = Entry(scrollable_frame, width=10)
+            xngrid_entry.grid(row=24, column=1, pady=3, sticky="W")
+            xngrid_entry.insert(0, self.tomostandards["gridx"])
+
+            Label(scrollable_frame, text="# of nodes for gridding (y)", bg="#F0F0F0").grid(row=25, column=0, pady=3, sticky="E")
+            yngrid_entry = Entry(scrollable_frame, width=10)
+            yngrid_entry.grid(row=25, column=1, pady=3, sticky="W")
+            yngrid_entry.insert(0, self.tomostandards["gridy"])
+
+            Label(scrollable_frame, text="# of contour levels", bg="#F0F0F0").grid(row=26, column=0, pady=3, sticky="E")
+            nlevels_entry = Entry(scrollable_frame, width=10)
+            nlevels_entry.grid(row=26, column=1, pady=3, sticky="W")
+            nlevels_entry.insert(0, self.tomostandards["nlevels"])
+
+            # --- Action Buttons Section ---
+            Button(scrollable_frame, text="Run Inversion", command=runInversion, bg="#228B22", fg="white", font=("Arial", 11, "bold")).grid(row=27, column=0, columnspan=2, pady=(15, 5), sticky="EW")
+            Button(scrollable_frame, text="Batch Inversion", command=self.batchTomography, bg="#0055aa", fg="white", font=("Arial", 11, "bold")).grid(row=28, column=0, columnspan=2, pady=5, sticky="EW")
+
+            # --- Info Section ---
+            info_text = (
+                "Tips:\n"
+                "- Hover over input fields for hints.\n"
+                "- Use 'View mesh' to preview before running inversion.\n"
+                "- Start model (.vtk) or velocity model (.vel) can be used as initial guess.\n"
+                "- Batch inversion lets you explore parameter ranges automatically."
+            )
+            Label(scrollable_frame, text=info_text, font=("Arial", 9), fg="#444", bg="#F0F0F0", justify="left", wraplength=340).grid(row=29, column=0, columnspan=2, pady=(10, 5), sticky="EW")
+
+            tomoWindow.tkraise()
 
     def saveResults(self):
 
