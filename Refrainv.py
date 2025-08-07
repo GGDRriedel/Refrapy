@@ -12,7 +12,7 @@ from matplotlib.lines import Line2D
 from matplotlib.colors import is_color_like
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
-from tkinter import Tk, Toplevel, Frame, Button, Label, filedialog, messagebox, PhotoImage, simpledialog, Entry, Canvas, Scrollbar
+from tkinter import Tk, ttk, Toplevel, Frame, Button, Menu,Label, filedialog, messagebox, PhotoImage, simpledialog, Entry, Canvas, Scrollbar, StringVar
 from os import path, makedirs, getcwd, name
 from obspy import read
 from obspy.signal.filter import lowpass, highpass
@@ -44,6 +44,7 @@ class Refrainv(Tk):
         self.title('Refrapy - Refrainv v2.0.0')
         self.configure(bg = "#F0F0F0")
         self.resizable(1,1)
+
         #check if on windows with nt kernel:
         if "nt" in name:
             self.iconbitmap("%s/images/ico_refrapy.ico"%getcwd())
@@ -54,6 +55,48 @@ class Refrainv(Tk):
         frame_toolbar = Frame(self)
         frame_toolbar.grid(row=0,column=0,sticky="EW")
         
+        # Add a menu bar
+        menubar = Menu(self)
+        self.config(menu=menubar)
+
+        # Project menu
+        project_menu = Menu(menubar, tearoff=0)
+        project_menu.add_command(label="New Project", command=self.createProject)
+        project_menu.add_command(label="Load Project", command=self.loadProject)
+        project_menu.add_separator()
+        project_menu.add_command(label="Exit", command=self.kill)
+        menubar.add_cascade(label="Project", menu=project_menu)
+
+        # Data menu
+        data_menu = Menu(menubar, tearoff=0)
+        data_menu.add_command(label="Load Pick File", command=self.loadPick)
+        menubar.add_cascade(label="Data", menu=data_menu)
+
+        # Inversion menu
+        inversion_menu = Menu(menubar, tearoff=0)
+        inversion_menu.add_command(label="Run Time-Terms Inversion", command=self.runTimeTerms)
+        inversion_menu.add_command(label="Run Tomography", command=self.runTomography)
+        inversion_menu.add_command(label="Batch Tomography", command=self.batchTomography)
+        menubar.add_cascade(label="Inversion", menu=inversion_menu)
+
+        # Visualization menu
+        viz_menu = Menu(menubar, tearoff=0)
+        viz_menu.add_command(label="Show Fit", command=self.showFit)
+        viz_menu.add_command(label="Show Velocity Mesh", command=self.showPgResult)
+        viz_menu.add_command(label="3D View", command=self.build3d)
+        menubar.add_cascade(label="Visualization", menu=viz_menu)
+
+        # Help menu
+        help_menu = Menu(menubar, tearoff=0)
+        help_menu.add_command(label="Help", command=self.help)
+        menubar.add_cascade(label="Help", menu=help_menu)
+
+        # Keep a minimal toolbar for most-used actions (optional)
+        #self.createToolbar()
+
+        self.protocol("WM_DELETE_WINDOW", self.kill)
+        self.initiateVariables()        
+
         photo = PhotoImage(file="%s/images/ico_refrapy.gif"%getcwd())
         labelPhoto = Label(frame_toolbar, image = photo, width = 151)
         labelPhoto.image = photo
@@ -174,6 +217,10 @@ class Refrainv(Tk):
 
         self.protocol("WM_DELETE_WINDOW", self.kill)
         self.initiateVariables()
+        self.status_var = StringVar()
+        self.status_var.set("Ready")
+        status_bar = Label(self, textvariable=self.status_var, bd=1, relief="sunken", anchor="w")
+        status_bar.grid(row=99, column=0, sticky="EW")
 
     def batchTomography(self):
         """Run tomography inversion for a range of parameters with a dynamic batch count display."""
@@ -469,7 +516,7 @@ class Refrainv(Tk):
             messagebox.showinfo(title="Refrainv", message="Layer assignment was cleared!")
         
     def createPanels(self):
-
+        
         self.frame_plots = Frame(self, bg = "white")
         self.frame_plots.grid(row = 1, column = 0, sticky = "NSWE")
 
@@ -545,6 +592,7 @@ class Refrainv(Tk):
         plt.close(self.fig_tomography)
         plt.close(self.fig_timeterms)
       
+      
     def createProject(self):
 
         self.projPath = filedialog.askdirectory()
@@ -570,11 +618,11 @@ class Refrainv(Tk):
                 self.createPanels()
                 messagebox.showinfo(title="Refrainv", message="Successfully created the project!")
                 self.statusLabel.configure(text="Project path ready!",font=("Arial", 11))
-                
+                self.status_var.set("Project created successfully.")
             else:
                 
                 messagebox.showinfo(title="Refrainv", message="A project was detected, please choose another name or directory!")
-
+        
     def loadProject(self):
 
         self.projPath = filedialog.askdirectory()
@@ -594,7 +642,7 @@ class Refrainv(Tk):
                 self.createPanels()
                 messagebox.showinfo(title="Refrainv", message="Successfully loaded the project path!")
                 self.statusLabel.configure(text="Project path ready!",font=("Arial", 11))
-                
+                self.status_var.set("Project loaded successfully.")
             else: messagebox.showerror(title="Refrainv", message="Not all folders were detected!\nPlease, check the structure of the selected project.")
 
     def loadPick(self):
@@ -696,7 +744,7 @@ class Refrainv(Tk):
 
                         self.fig_data.canvas.draw()
                         messagebox.showinfo(title="Refrainv", message="Traveltimes data have been loaded successfully!")
-   
+                        self.status_var.set("Project created successfully.")
     
     
     def runTimeTerms(self):
@@ -1139,7 +1187,7 @@ class Refrainv(Tk):
             tomoWindow = Toplevel(self)
             tomoWindow.title('Refrainv - Tomography')
             tomoWindow.configure(bg = "#F0F0F0")
-            tomoWindow.geometry("400x600")
+            tomoWindow.geometry("400x800")
             tomoWindow.resizable(True,True)
             #check if on windows with nt kernel:
             if "nt" in name:
@@ -1935,7 +1983,6 @@ class Refrainv(Tk):
             # --- Info Section ---
             info_text = (
                 "Tips:\n"
-                "- Hover over input fields for hints.\n"
                 "- Use 'View mesh' to preview before running inversion.\n"
                 "- Start model (.vtk) or velocity model (.vel) can be used as initial guess.\n"
                 "- Batch inversion lets you explore parameter ranges automatically."
