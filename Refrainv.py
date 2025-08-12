@@ -221,7 +221,24 @@ class Refrainv(Tk):
         self.status_var.set("Ready")
         status_bar = Label(self, textvariable=self.status_var, bd=1, relief="sunken", anchor="w")
         status_bar.grid(row=99, column=0, sticky="EW")
-
+    
+    def saveConfig(self, config_dict=None):
+        """Write or update config.json in the project folder."""
+        config_path = os.path.join(self.projPath, "config.json")
+        # Use current tomostandards if not provided
+        if config_dict is None:
+            config_dict = self.tomostandards
+        # Only write if file does not exist or content differs
+        try:
+            if os.path.exists(config_path):
+                with open(config_path, "r") as f:
+                    existing = json.load(f)
+                if existing == config_dict:
+                    return  # No change needed
+            with open(config_path, "w") as f:
+                json.dump(config_dict, f, indent=4)
+        except Exception as e:
+            messagebox.showwarning("Refrainv", f"Could not write config.json: {e}")
     def batchTomography(self):
         """Run tomography inversion for a range of parameters with a dynamic batch count display."""
         # Dialog to get parameter ranges
@@ -1738,6 +1755,9 @@ class Refrainv(Tk):
                 
                 end_timing = datetime.now()
                 self.tomotiming = end_timing - start_timing
+                #save the parameters to config.json
+                self.saveConfig() 
+                print("Parameters saved to config.json")
                 
                 # Regular pygimli save
                 self.mgr.saveResult(self.projPath)
