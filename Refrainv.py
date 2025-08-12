@@ -74,7 +74,7 @@ class Refrainv(Tk):
 
         # Inversion menu
         inversion_menu = Menu(menubar, tearoff=0)
-        inversion_menu.add_command(label="Run Time-Terms Inversion", command=self.runTimeTerms)
+        #inversion_menu.add_command(label="Run Time-Terms Inversion", command=self.runTimeTerms)
         inversion_menu.add_command(label="Run Tomography", command=self.runTomography)
         inversion_menu.add_command(label="Batch Tomography", command=self.batchTomography)
         menubar.add_cascade(label="Inversion", menu=inversion_menu)
@@ -139,7 +139,7 @@ class Refrainv(Tk):
         bt.grid(row = 0, column = 3, sticky="W")
         b = Balloon(self)
         b.bind(bt,"Load pick file")
-
+        """ 
         bt = Button(frame_toolbar, image = self.ico_layerMode,command = self.layersInterpretation)
         bt.grid(row = 0, column = 4, sticky="W")
         b = Balloon(self)
@@ -169,6 +169,7 @@ class Refrainv(Tk):
         bt.grid(row = 0, column = 9, sticky="W")
         b = Balloon(self)
         b.bind(bt,"Run time-terms inversion")
+        """
 
         bt = Button(frame_toolbar, image = self.ico_invTomo,command = self.runTomography)
         bt.grid(row = 0, column = 10, sticky="W")
@@ -798,7 +799,7 @@ class Refrainv(Tk):
 
         if self.layer1 and self.layer2 or self.layer1 and self.layer3:
                     
-            self.clearTimeTermsPlot()
+            #self.clearTimeTermsPlot()
 
             regw = simpledialog.askfloat("Refrainv", "Enter the regularization weight to be used for data inversion or cancel for default (lambda = 0.1)")
             
